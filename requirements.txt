@@ -1,0 +1,8 @@
+streamlit
+cryptography
+Pillow
+numpy
+matplotlib
+pandas
+openpyxl
+pytest
