@@ -44,8 +44,18 @@ stego/                Payload format, PRNG positions, capacity, LSB
   lsb.py                One-bit RGB LSB embed/extract at the raw payload level
 stegochat/            End-to-end orchestration
   core.py               embed_plaintext / extract_plaintext
-analysis/             Reserved for quality metrics (currently empty)
-tests/                Unit and integration tests for the V1 core pipeline
+analysis/             Image quality metrics and steganalysis tools
+  metrics.py            MSE and PSNR calculations
+  histogram.py          RGB histogram computation and comparison
+  bitplane.py           LSB bit-plane extraction and visualization
+  jpeg_fragility.py     JPEG recompression fragility testing
+  image_utils.py        Shared image processing utilities
+stegochat/            End-to-end orchestration
+  core.py               embed_plaintext / extract_plaintext
+laboratory.py         Laboratory experiment runner and XLSX export
+app.py                Streamlit web application
+analysis/             Image quality metrics and steganalysis tools
+tests/                Unit and integration tests for all modules
 data/                 Sample assets for tests and demonstrations
 docs/                 System design and planning documents
 results/              Generated local artifacts (ignored by Git)
@@ -109,6 +119,8 @@ An incorrect `stego_key` or a modified protected payload makes `extract_plaintex
 
 ## Implemented features
 
+### Core Cryptography
+
 - AES-256-GCM authenticated encryption (`crypto/aes.py`).
 - PBKDF2-HMAC-SHA256 key derivation with a random 16-byte salt at 100,000 iterations (`crypto/kdf.py`).
 - V1 payload build and parse with a fixed 34-byte header (`stego/payload.py`).
@@ -116,14 +128,60 @@ An incorrect `stego_key` or a modified protected payload makes `extract_plaintex
 - RGB-channel capacity checks (`stego/capacity.py`).
 - One-bit RGB LSB embedding and extraction of raw payload bytes (`stego/lsb.py`).
 - End-to-end `embed_plaintext` / `extract_plaintext` orchestration (`stegochat/core.py`).
+
+### Image Quality Metrics
+
+- Mean Squared Error (MSE) calculation (`analysis/metrics.py`).
+- Peak Signal-to-Noise Ratio (PSNR) calculation (`analysis/metrics.py`).
+- RGB histogram computation and comparison (`analysis/histogram.py`).
+- LSB bit-plane extraction and visualization (`analysis/bitplane.py`).
+
+### Security Testing
+
+- JPEG recompression fragility testing (`analysis/jpeg_fragility.py`).
+- Automated laboratory experiment runner (`laboratory.py`).
+- XLSX export for experiment results (`laboratory.py`).
+
+### User Interface
+
+- Streamlit web application with 3 tabs (`app.py`):
+  - **Tab 1 - Embed & Send**: Upload cover image, enter message, embed and download stego image.
+  - **Tab 2 - Extract & Read**: Upload stego image, enter key, extract and decrypt message.
+  - **Tab 3 - Laboratory & Security Testing**: Histogram analysis, LSB bit-plane visualization, JPEG attack testing, and experiment runner.
+
+### Testing
+
 - Unit and integration tests for the core pipeline (`tests/`).
+- Laboratory experiment tests (`tests/test_laboratory.py`).
+- 71 total tests passing.
+
+## Test Results
+
+Run the test suite:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+Current result: **71 tests passing**
+
+## Generated Artifacts
+
+Run the laboratory experiment runner to generate results:
+
+```python
+from laboratory import run_default_laboratory
+
+results = run_default_laboratory()
+print(f"Generated {len(results)} experiment results")
+```
+
+This generates `results/laboratory_results.xlsx` with experiment data for 5 test images × 3 message sizes = 15 cases.
 
 ## Planned features (not in the current code)
 
 These are described in the system design but are absent from the current implementation:
 
-- Streamlit interface / laboratory UI.
-- MSE and PSNR image-quality metrics (`analysis/` is empty).
-- Histogram analysis.
-- JPEG / lossy-transport robustness testing.
-- Any report, notebook, or generated quality artifact.
+- Any additional steganalysis techniques beyond JPEG fragility.
+- Advanced image quality metrics beyond MSE/PSNR.
+- Perceptual similarity metrics (SSIM, etc.).
