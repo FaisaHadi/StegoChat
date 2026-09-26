@@ -115,7 +115,11 @@ recovered = extract_plaintext(
 assert recovered == "hello from StegoChat"
 ```
 
-An incorrect `stego_key` or a modified protected payload makes `extract_plaintext` raise `cryptography.exceptions.InvalidTag`; plaintext is never returned in that case.
+Extraction has two validation layers:
+
+1. **Payload format validation** (before cryptographic authentication): If the extracted LSB data does not have valid V1 magic bytes, `extract_plaintext` raises `ValueError: invalid StegoChat V1 magic`. This occurs before AES-GCM authentication and indicates either a wrong `stego_key` (which produces wrong LSB positions), JPEG corruption, or non-StegoChat data.
+
+2. **AES-GCM authentication** (after payload parsing): If the ciphertext or authentication tag is corrupted or the `stego_key` is wrong, `decrypt_gcm()` raises `cryptography.exceptions.InvalidTag`. Plaintext is never returned in either case.
 
 ## Implemented features
 

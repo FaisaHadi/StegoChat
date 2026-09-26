@@ -147,7 +147,7 @@ def tab_embed_send() -> None:
                 # Capacity check
                 width, height = cover_image.size
                 capacity = width * height * 3
-                payload_bits = 272 + (len(message.encode("utf-8")) * 8)
+                payload_bits = (34 + len(message.encode("utf-8")) + 16) * 8
 
                 st.info(
                     f"**Image Size:** {width}x{height} | "
@@ -515,7 +515,7 @@ def tab_laboratory() -> None:
                                     cover_image, message, stego_key_bytes
                                 )
 
-                                payload_bits = 272 + (msg_size * 8)
+                                payload_bits = (34 + msg_size + 16) * 8
                                 capacity_utilization = (
                                     (payload_bits / capacity) * 100
                                     if capacity > 0

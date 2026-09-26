@@ -56,7 +56,7 @@ def run_experiment_case(
     width, height = cover_image.size
     capacity = width * height * 3
     msg_bytes = len(message.encode("utf-8"))
-    payload_bits = 272 + (msg_bytes * 8)
+    payload_bits = (34 + msg_bytes + 16) * 8
     capacity_utilization = (payload_bits / capacity) * 100 if capacity > 0 else 0
 
     try:
