@@ -1,0 +1,54 @@
+"""End-to-end StegoChat V1 embed and extract orchestration."""
+
+from __future__ import annotations
+
+from PIL import Image
+
+from crypto.aes import decrypt_gcm, encrypt_gcm, generate_nonce
+from crypto.kdf import derive_aes_key, generate_salt
+from stego.lsb import embed_payload, extract_payload
+from stego.payload import HEADER_SIZE, build_payload, parse_payload
+
+
+def embed_plaintext(
+    cover_rgb: Image.Image, plaintext: str, stego_key_bytes: bytes
+) -> Image.Image:
+    """Encrypt UTF-8 plaintext and embed its V1 payload in an RGB image."""
+    _validate_plaintext(plaintext)
+    _validate_stego_key(stego_key_bytes)
+
+    salt = generate_salt()
+    aes_key = derive_aes_key(stego_key_bytes, salt)
+    nonce = generate_nonce()
+    ciphertext, auth_tag = encrypt_gcm(plaintext.encode("utf-8"), aes_key, nonce)
+    payload = build_payload(ciphertext, auth_tag, salt, nonce)
+
+    return embed_payload(
+        cover_rgb,
+        payload[:HEADER_SIZE],
+        payload[HEADER_SIZE:],
+        stego_key_bytes,
+    )
+
+
+def extract_plaintext(stego_rgb: Image.Image, stego_key_bytes: bytes) -> str:
+    """Extract, authenticate, decrypt, and UTF-8 decode a V1 payload."""
+    _validate_stego_key(stego_key_bytes)
+
+    payload = extract_payload(stego_rgb, stego_key_bytes)
+    ciphertext, auth_tag, salt, nonce = parse_payload(payload)
+    aes_key = derive_aes_key(stego_key_bytes, salt)
+    plaintext_bytes = decrypt_gcm(ciphertext, auth_tag, aes_key, nonce)
+    return plaintext_bytes.decode("utf-8")
+
+
+def _validate_plaintext(plaintext: str) -> None:
+    if not isinstance(plaintext, str):
+        raise TypeError("plaintext must be a string")
+
+
+def _validate_stego_key(stego_key_bytes: bytes) -> None:
+    if not isinstance(stego_key_bytes, bytes):
+        raise TypeError("stego_key_bytes must be bytes")
+    if not stego_key_bytes:
+        raise ValueError("stego_key_bytes must not be empty")
