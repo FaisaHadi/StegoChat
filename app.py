@@ -19,7 +19,7 @@ from PIL import Image
 
 from analysis.bitplane import compare_lsb_bit_planes, extract_lsb_bit_plane, plane_to_image
 from analysis.histogram import compare_rgb_histograms, compute_rgb_histogram
-from analysis.jpeg_fragility import run_jpeg_fragility_test
+from analysis.jpeg_fragility import run_jpeg_fragility_test, run_jpeg_quality_sweep
 from analysis.metrics import calculate_mse, calculate_psnr
 from stegochat.core import embed_plaintext, extract_plaintext
 from analysis.chi_square import compute_chi_square_test, chi_square_report_to_rows
@@ -255,6 +255,19 @@ st.markdown(
         box-shadow: 0 0 0 1px #38BDF8 !important;
     }
 
+    /* Streamlit already provides its own show/hide-password button. Hide the
+       browser's password-reveal affordance, which appears after the first
+       character in Edge/Windows and otherwise creates a second eye icon. */
+    .stTextInput input[type="password"]::-ms-reveal,
+    .stTextInput input[type="password"]::-ms-clear {
+        display: none !important;
+    }
+
+    .stTextInput input[type="password"]::-webkit-credentials-auto-fill-button {
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
+
     [data-testid="stFileUploader"] {
         border: 1px dashed #1F2937;
         border-radius: 12px;
@@ -366,7 +379,7 @@ st.markdown(
 
     /* Welcome screen: centered vertically, below Streamlit's header. */
     div.st-key-welcome_screen {
-        margin-top: 3.75rem !important;              /* tinggi header Streamlit */
+        margin-top: 0 !important;                     /* offset diatur oleh block container */
         min-height: calc(100vh - 5rem) !important;
         height: auto !important;
         display: flex !important;
@@ -503,11 +516,88 @@ st.markdown(
         letter-spacing: 0.04em;
     }
 
-    .welcome-features span {
+    .welcome-features > .welcome-feature {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.42rem;
         padding: 0.4rem 0.75rem;
         border: 1px solid #1E293B;
         border-radius: 999px;
         background: rgba(15, 23, 42, 0.55);
+    }
+
+    .welcome-feature svg {
+        width: 14px;
+        height: 14px;
+        flex: 0 0 14px;
+        stroke: #38BDF8;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        fill: none;
+    }
+
+    .chi-square-success {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        padding: 1rem;
+        border: 1px solid rgba(34, 197, 94, 0.28);
+        border-radius: 10px;
+        background: rgba(20, 83, 45, 0.55);
+        color: #4ADE80;
+        line-height: 1.5;
+    }
+
+    .chi-square-success svg {
+        width: 18px;
+        height: 18px;
+        flex: 0 0 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+
+    .app-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        width: 100%;
+        margin-top: 2.5rem;
+        padding: 1.1rem 0 0.25rem;
+        border-top: 1px solid rgba(51, 65, 85, 0.72);
+        color: #94A3B8;
+        font-size: 0.72rem;
+        line-height: 1.5;
+    }
+
+    .app-footer-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        color: #CBD5E1;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        white-space: nowrap;
+    }
+
+    .app-footer-brand svg {
+        width: 17px;
+        height: 17px;
+        flex: 0 0 17px;
+        fill: none;
+        stroke: #38BDF8;
+        stroke-width: 1.7;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+
+    .app-footer-note {
+        margin: 0;
+        text-align: right;
     }
 
     /* Keep the welcome controls close to the card instead of pushing them to
@@ -593,6 +683,10 @@ st.markdown(
     }
 
     div.st-key-back_to_welcome button {
+        position: relative !important;
+        z-index: 10 !important;
+        pointer-events: auto !important;
+        cursor: pointer !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
@@ -621,22 +715,36 @@ st.markdown(
         box-shadow: 0 0 12px rgba(56, 189, 248, 0.25) !important;
     }
 
-    /* Main hero sits immediately below the header row. */
+    /* Keep controls below Streamlit's transparent Deploy toolbar. Without this
+       offset the toolbar sits above the back button and consumes mouse input. */
     .main .block-container,
     [data-testid="stMainBlockContainer"] {
-        padding-top: 0 !important;
+        padding-top: 4rem !important;
     }
 
     /* ============ RESPONSIVE ============ */
 
     @media (max-width: 900px) {
+        .main .block-container,
+        [data-testid="stMainBlockContainer"],
         [data-testid="BlockContainer"] {
-            padding: 0.5rem 1.25rem 2rem 1.25rem !important;
+            padding: 3.75rem 1.25rem 2rem 1.25rem !important;
         }
 
         div.st-key-welcome_screen {
             min-height: calc(100vh - 5rem) !important;
             padding-top: 0.5rem !important;
+        }
+
+        .app-footer {
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 0.45rem;
+            margin-top: 2rem;
+        }
+
+        .app-footer-note {
+            text-align: left;
         }
 
         .welcome-wrap {
@@ -767,9 +875,7 @@ def tab_embed_send() -> None:
 
     col1, col2 = st.columns([1, 1], gap="large")
 
-    stego_image = None
     cover_image = None
-    mse = psnr = None
 
     with col1:
         st.subheader("Input")
@@ -818,43 +924,40 @@ def tab_embed_send() -> None:
                         )
                         mse = calculate_mse(cover_image, stego_image)
                         psnr = calculate_psnr(cover_image, stego_image)
+                        st.session_state["embed_result"] = {
+                            "image_bytes": image_to_bytes(stego_image, "PNG"),
+                            "mse": mse,
+                            "psnr": psnr,
+                        }
 
             except Exception as e:
                 st.error(f"Error: {str(e)}")
         else:
             st.warning("Please provide cover image, message, and stego key")
 
+    # A download button reruns Streamlit. Keep the completed result in session
+    # state so the output remains visible after downloading or other reruns.
+    embed_result = st.session_state.get("embed_result")
+
     with col2:
         st.subheader("Output")
 
-        if stego_image is not None:
+        if embed_result is not None:
             st.success("Message embedded successfully!")
 
             metric_col1, metric_col2 = st.columns(2)
 
             with metric_col1:
-                st.metric("MSE", f"{mse:.4f}")
+                st.metric("MSE", f"{embed_result['mse']:.4f}")
 
             with metric_col2:
-                st.metric("PSNR", f"{psnr:.2f} dB")
+                st.metric("PSNR", f"{embed_result['psnr']:.2f} dB")
 
-            # ================================================================
-            # KOTAK OUTPUT STEGO IMAGE
-            # ================================================================
-
-            st.markdown(
-                '<div class="output-image-box">',
-                unsafe_allow_html=True,
-            )
-
+            # Do not try to wrap a Streamlit element with raw HTML: Streamlit
+            # renders st.image as a separate DOM block, leaving an empty box.
             st.image(
-                stego_image,
-                use_container_width=True,
-            )
-
-            st.markdown(
-                "</div>",
-                unsafe_allow_html=True,
+                embed_result["image_bytes"],
+                width="stretch",
             )
 
             # Teks hasil penyisipan berada di bawah kotak
@@ -869,11 +972,9 @@ def tab_embed_send() -> None:
                 unsafe_allow_html=True,
             )
 
-            stego_bytes = image_to_bytes(stego_image, "PNG")
-
             st.download_button(
                 label="Download Stego Image (PNG)",
-                data=stego_bytes,
+                data=embed_result["image_bytes"],
                 file_name="stego_image.png",
                 mime="image/png",
             )
@@ -979,6 +1080,599 @@ def tab_extract_read() -> None:
 # ============================================================================
 # TAB 3: LABORATORY & SECURITY TESTING
 # ============================================================================
+
+
+def _render_jpeg_attack_panel() -> None:
+    """Render an interactive quality sweep for the LSB JPEG fragility test."""
+    st.subheader("Uji kerapuhan kompresi JPEG")
+    st.caption(
+        "Bandingkan beberapa kualitas JPEG dan lihat dampaknya pada pemulihan "
+        "pesan yang disisipkan dengan LSB."
+    )
+    cover_upload = st.file_uploader(
+        "Gambar cover",
+        type=["png", "bmp"],
+        key="jpeg_cover",
+    )
+    message = st.text_area("Pesan uji", height=70, key="jpeg_message")
+    stego_key = st.text_input(
+        "Stego-key",
+        type="password",
+        key="jpeg_key",
+    )
+    qualities = st.multiselect(
+        "Kualitas JPEG yang diuji",
+        [95, 90, 85, 70, 50],
+        default=[90, 70, 50],
+        help="Kualitas lebih rendah biasanya mengubah lebih banyak nilai piksel.",
+    )
+
+    if st.button(
+        "Jalankan uji kualitas",
+        type="primary",
+        key="run_jpeg_attack_sweep",
+    ):
+        if not cover_upload or not message or not stego_key or not qualities:
+            st.warning(
+                "Unggah gambar, isi pesan dan stego-key, lalu pilih minimal "
+                "satu kualitas JPEG."
+            )
+        else:
+            try:
+                cover_upload.seek(0)
+                with Image.open(cover_upload) as source:
+                    cover_image = source.convert("RGB")
+                with st.spinner("Menjalankan uji kompresi JPEG..."):
+                    sweep = run_jpeg_quality_sweep(
+                        cover_image,
+                        message,
+                        stego_key.encode("utf-8"),
+                        qualities=tuple(sorted(qualities, reverse=True)),
+                    )
+                st.session_state["jpeg_attack_results"] = [
+                    {
+                        "quality": result.quality,
+                        "jpeg_created": result.jpeg_created,
+                        "jpeg_size_bytes": result.jpeg_size_bytes,
+                        "extraction_succeeded": result.extraction_succeeded,
+                        "decryption_succeeded": result.decryption_succeeded,
+                        "plaintext_matches": result.plaintext_matches,
+                        "outcome": "destroyed"
+                        if result.attack_destroyed_payload
+                        else "survived",
+                        "error_stage": result.error_stage,
+                        "error_type": result.error_type,
+                    }
+                    for result in sweep
+                ]
+                st.session_state["jpeg_attack_updated_at"] = (
+                    pd.Timestamp.now().strftime("%d %b %Y, %H:%M")
+                )
+            except Exception as error:
+                st.error(f"Uji JPEG gagal dijalankan: {error}")
+
+    if st.button("Hapus hasil uji JPEG", key="clear_jpeg_attack_results"):
+        st.session_state.pop("jpeg_attack_results", None)
+        st.session_state.pop("jpeg_attack_updated_at", None)
+
+    saved_results = st.session_state.get("jpeg_attack_results", [])
+    if not saved_results:
+        st.info("Jalankan pengujian untuk melihat grafik dan ringkasan hasil.")
+        return
+
+    results_df = pd.DataFrame(saved_results).sort_values(
+        "quality", ascending=False
+    )
+    destroyed_count = int((results_df["outcome"] == "destroyed").sum())
+    survived_count = int((results_df["outcome"] == "survived").sum())
+    st.caption(
+        f"Batch terakhir diperbarui "
+        f"{st.session_state.get('jpeg_attack_updated_at', '—')} · "
+        f"{len(results_df)} kualitas diuji"
+    )
+    with st.container(horizontal=True):
+        st.metric("Kualitas diuji", len(results_df), border=True)
+        st.metric("Payload rusak", destroyed_count, border=True)
+        st.metric("Pesan berhasil dipulihkan", survived_count, border=True)
+
+    summary_df = pd.DataFrame(
+        {
+            "Kualitas JPEG": results_df["quality"],
+            "Payload rusak": (results_df["outcome"] == "destroyed").astype(int),
+            "Payload bertahan": (results_df["outcome"] == "survived").astype(int),
+        }
+    )
+    st.bar_chart(
+        summary_df,
+        x="Kualitas JPEG",
+        y=["Payload rusak", "Payload bertahan"],
+        width="stretch",
+    )
+
+    outcome_filter = st.selectbox(
+        "Filter hasil",
+        ["Semua hasil", "Payload rusak", "Payload bertahan"],
+        key="jpeg_attack_outcome_filter",
+    )
+    displayed_df = results_df.copy()
+    if outcome_filter == "Payload rusak":
+        displayed_df = displayed_df[displayed_df["outcome"] == "destroyed"]
+    elif outcome_filter == "Payload bertahan":
+        displayed_df = displayed_df[displayed_df["outcome"] == "survived"]
+
+    outcome_labels = {
+        "destroyed": "Payload rusak",
+        "survived": "Payload bertahan",
+    }
+    displayed_df["outcome"] = displayed_df["outcome"].map(outcome_labels)
+    st.dataframe(
+        displayed_df.rename(
+            columns={
+                "quality": "Kualitas JPEG",
+                "jpeg_created": "JPEG terbentuk",
+                "jpeg_size_bytes": "Ukuran hasil (byte)",
+                "extraction_succeeded": "Ekstraksi berhasil",
+                "decryption_succeeded": "Dekripsi berhasil",
+                "plaintext_matches": "Pesan cocok",
+                "outcome": "Hasil serangan",
+                "error_stage": "Tahap gagal",
+                "error_type": "Jenis error",
+            }
+        ),
+        width="stretch",
+        hide_index=True,
+    )
+    st.info(
+        f"Kompresi JPEG merusak payload pada {destroyed_count} dari "
+        f"{len(results_df)} kualitas yang diuji. Hasil ini memperlihatkan "
+        "kerapuhan LSB terhadap format lossy; gunakan PNG atau BMP untuk "
+        "menjaga payload tetap utuh."
+    )
+
+
+def _render_laboratory_runner() -> None:
+    """Run repeatable cases and render a filterable laboratory dashboard."""
+    st.subheader("Experiment Runner")
+    st.caption(
+        "Jalankan pengujian pada beberapa gambar dan ukuran pesan. Hasil tersimpan "
+        "selama sesi ini sehingga filter, grafik, dan detail tetap dapat dijelajahi."
+    )
+
+    image_dir = "data/test_images"
+    try:
+        import os
+
+        image_files = sorted(
+            filename
+            for filename in os.listdir(image_dir)
+            if filename.lower().endswith((".png", ".bmp"))
+        )
+    except FileNotFoundError:
+        st.warning(f"Folder gambar bawaan tidak ditemukan: {image_dir}")
+        image_files = []
+
+    if not image_files:
+        st.info("Belum ada gambar bawaan. Kamu tetap bisa mengunggah gambar sendiri.")
+
+    with st.form("lab_experiment_form", border=False):
+        selected_images = st.multiselect(
+            "Gambar uji bawaan",
+            image_files,
+            default=image_files[: min(5, len(image_files))],
+            help="Pilih gambar yang sudah tersedia di folder gambar uji proyek.",
+        )
+        uploaded_images = st.file_uploader(
+            "Unggah gambar uji sendiri (PNG/BMP)",
+            type=["png", "bmp"],
+            accept_multiple_files=True,
+            key="lab_uploaded_images",
+            help="Gambar yang diunggah akan digabung dengan pilihan bawaan saat eksperimen dijalankan.",
+        )
+        message_sizes = st.multiselect(
+            "Ukuran pesan (byte)",
+            [10, 50, 100, 200, 500],
+            default=[10, 50, 100],
+            help="Pesan uji dibuat dari karakter ASCII agar ukuran byte konsisten.",
+        )
+        stego_key = st.text_input(
+            "Stego-key untuk pengujian",
+            type="password",
+            key="lab_key",
+            help="Kunci hanya dipakai selama proses pengujian dan tidak masuk ke hasil ekspor.",
+        )
+        run_requested = st.form_submit_button(
+            "Jalankan eksperimen",
+            type="primary",
+            width="stretch",
+        )
+    clear_requested = st.button("Hapus hasil", key="clear_laboratory_results")
+
+    if clear_requested:
+        st.session_state.pop("lab_results", None)
+        st.session_state.pop("lab_results_updated_at", None)
+        st.info("Hasil eksperimen sesi ini sudah dihapus.")
+        return
+
+    if run_requested:
+        experiment_images: list[tuple[str, str | bytes]] = [
+            (image_name, f"{image_dir}/{image_name}")
+            for image_name in selected_images
+        ]
+        experiment_images.extend(
+            (
+                f"Unggahan {index}: {uploaded.name}",
+                uploaded.getvalue(),
+            )
+            for index, uploaded in enumerate(uploaded_images or [], start=1)
+        )
+
+        if not experiment_images or not message_sizes:
+            st.warning("Pilih atau unggah minimal satu gambar dan pilih ukuran pesan.")
+        elif not stego_key:
+            st.warning("Masukkan stego-key untuk menjalankan eksperimen.")
+        else:
+            results: list[dict[str, Any]] = []
+            total_cases = len(experiment_images) * len(message_sizes)
+            progress_bar = st.progress(0.0)
+            progress_label = st.empty()
+            current_case = 0
+            stego_key_bytes = stego_key.encode("utf-8")
+
+            for image_name, image_source in experiment_images:
+                try:
+                    image_input = (
+                        io.BytesIO(image_source)
+                        if isinstance(image_source, bytes)
+                        else image_source
+                    )
+                    with Image.open(image_input) as source:
+                        cover_image = source.convert("RGB")
+                    width, height = cover_image.size
+                    available_bits = width * height * 3
+
+                    for message_size in message_sizes:
+                        current_case += 1
+                        progress_label.caption(
+                            f"Memproses kasus {current_case} dari {total_cases}: "
+                            f"{image_name}, pesan {message_size} byte"
+                        )
+                        result = run_laboratory_experiment(
+                            cover_image,
+                            "X" * message_size,
+                            stego_key_bytes,
+                        )
+                        payload_size_bytes = 34 + message_size + 16
+                        capacity_utilization = (
+                            payload_size_bytes * 8 / available_bits * 100
+                            if available_bits
+                            else 0.0
+                        )
+                        jpeg_destroyed = result["jpeg_destroyed_payload"]
+                        jpeg_outcome = (
+                            "not_run"
+                            if jpeg_destroyed is None
+                            else "destroyed"
+                            if jpeg_destroyed
+                            else "survived"
+                        )
+
+                        results.append(
+                            {
+                                "image_name": image_name,
+                                "width": width,
+                                "height": height,
+                                "capacity_bits": available_bits,
+                                "capacity_bytes": available_bits // 8,
+                                "message_size_bytes": message_size,
+                                "payload_size_bytes": payload_size_bytes,
+                                "capacity_utilization_percent": round(
+                                    capacity_utilization, 2
+                                ),
+                                "mse": round(result["mse"], 4)
+                                if result["mse"] is not None
+                                else None,
+                                "psnr": round(result["psnr"], 2)
+                                if result["psnr"] is not None
+                                else None,
+                                "embed_success": result["embed_success"],
+                                "extract_success": result["extract_success"],
+                                "jpeg_attack_result": jpeg_outcome,
+                                "error": result["error"],
+                            }
+                        )
+                        progress_bar.progress(current_case / total_cases)
+                except Exception as error:
+                    st.error(f"Gagal memproses {image_name}: {error}")
+
+            st.session_state["lab_results"] = results
+            st.session_state["lab_results_updated_at"] = pd.Timestamp.now().strftime(
+                "%d %b %Y, %H:%M"
+            )
+            progress_label.empty()
+            progress_bar.empty()
+            successful_cases = sum(
+                row["embed_success"] and row["extract_success"] for row in results
+            )
+            st.success(
+                f"Selesai: {len(results)} kasus dianalisis, "
+                f"{successful_cases} berhasil dipulihkan."
+            )
+
+    results = st.session_state.get("lab_results", [])
+    if not results:
+        st.info(
+            "Hasil akan muncul di sini setelah eksperimen dijalankan. "
+            "Pilih gambar, ukuran pesan, dan stego-key di atas."
+        )
+        return
+
+    results_df = pd.DataFrame(results)
+    results_df["overall_success"] = (
+        results_df["embed_success"].fillna(False)
+        & results_df["extract_success"].fillna(False)
+    )
+    results_df["psnr"] = pd.to_numeric(results_df["psnr"], errors="coerce")
+    results_df["mse"] = pd.to_numeric(results_df["mse"], errors="coerce")
+    st.caption(
+        f"Hasil terakhir diperbarui {st.session_state.get('lab_results_updated_at', '—')} · "
+        f"{len(results_df)} kasus tersimpan"
+    )
+
+    filter_cols = st.columns([1.2, 1, 1])
+    image_options = ["Semua gambar", *sorted(results_df["image_name"].unique())]
+    size_values = sorted(results_df["message_size_bytes"].unique())
+    size_options = ["Semua ukuran", *[f"{size} byte" for size in size_values]]
+    if st.session_state.get("lab_filter_image") not in image_options:
+        st.session_state["lab_filter_image"] = image_options[0]
+    if st.session_state.get("lab_filter_size") not in size_options:
+        st.session_state["lab_filter_size"] = size_options[0]
+
+    with filter_cols[0]:
+        selected_image = st.selectbox(
+            "Filter gambar", image_options, key="lab_filter_image"
+        )
+    with filter_cols[1]:
+        selected_size = st.selectbox(
+            "Filter pesan", size_options, key="lab_filter_size"
+        )
+    with filter_cols[2]:
+        selected_status = st.selectbox(
+            "Status ekstraksi",
+            ["Semua status", "Berhasil", "Gagal"],
+            key="lab_filter_status",
+        )
+    trend_metric = st.segmented_control(
+        "Metrik grafik",
+        ["PSNR", "MSE"],
+        default="PSNR",
+        key="lab_trend_metric",
+    )
+
+    filtered_df = results_df.copy()
+    if selected_image != "Semua gambar":
+        filtered_df = filtered_df[filtered_df["image_name"] == selected_image]
+    if selected_size != "Semua ukuran":
+        size_value = int(selected_size.split()[0])
+        filtered_df = filtered_df[
+            filtered_df["message_size_bytes"] == size_value
+        ]
+    if selected_status == "Berhasil":
+        filtered_df = filtered_df[filtered_df["overall_success"]]
+    elif selected_status == "Gagal":
+        filtered_df = filtered_df[~filtered_df["overall_success"]]
+
+    if filtered_df.empty:
+        st.info("Tidak ada kasus yang cocok dengan filter ini.")
+        return
+
+    st.subheader("Ringkasan hasil")
+    success_count = int(filtered_df["overall_success"].sum())
+    measured_psnr = filtered_df["psnr"].dropna()
+    average_psnr = measured_psnr.mean() if not measured_psnr.empty else None
+    quality_pass_count = int((measured_psnr >= 30).sum())
+    jpeg_tested = filtered_df[
+        filtered_df["jpeg_attack_result"].isin(["destroyed", "survived"])
+    ]
+    jpeg_destroyed_count = int(
+        (jpeg_tested["jpeg_attack_result"] == "destroyed").sum()
+    )
+    average_capacity = filtered_df["capacity_utilization_percent"].mean()
+
+    with st.container(horizontal=True):
+        st.metric("Total kasus", len(filtered_df), border=True)
+        st.metric(
+            "Ekstraksi berhasil",
+            f"{success_count}/{len(filtered_df)} "
+            f"({success_count / len(filtered_df) * 100:.1f}%)",
+            border=True,
+        )
+        st.metric(
+            "Rata-rata PSNR",
+            f"{average_psnr:.2f} dB" if average_psnr is not None else "—",
+            border=True,
+        )
+        st.metric(
+            "Payload rusak oleh JPEG",
+            f"{jpeg_destroyed_count}/{len(jpeg_tested)}"
+            if len(jpeg_tested)
+            else "Belum diuji",
+            border=True,
+        )
+    st.caption(
+        f"PSNR memenuhi ambang 30 dB pada {quality_pass_count}/"
+        f"{len(measured_psnr)} kasus terukur · "
+        f"Rata-rata penggunaan kapasitas {average_capacity:.2f}%"
+    )
+    if measured_psnr.empty:
+        st.warning("Belum ada PSNR yang dapat dihitung dari kasus terfilter.")
+    elif quality_pass_count < len(measured_psnr):
+        st.warning(
+            "Sebagian hasil berada di bawah ambang PSNR 30 dB. "
+            "Coba ukuran pesan yang lebih kecil atau gambar dengan kapasitas lebih besar."
+        )
+    else:
+        st.success("Semua kasus terukur memenuhi ambang PSNR 30 dB.")
+
+    st.subheader("Grafik interaktif")
+    chart_cols = st.columns(2)
+    metric_key = "psnr" if trend_metric == "PSNR" else "mse"
+    metric_unit = "dB" if trend_metric == "PSNR" else "piksel kuadrat"
+    trend_df = filtered_df.dropna(subset=[metric_key]).sort_values(
+        ["image_name", "message_size_bytes"]
+    )
+    with chart_cols[0]:
+        st.markdown(f"**{trend_metric} menurut ukuran pesan**")
+        if trend_df.empty:
+            st.info(f"Belum ada nilai {trend_metric} untuk filter ini.")
+        else:
+            st.line_chart(
+                trend_df,
+                x="message_size_bytes",
+                y=metric_key,
+                x_label="Ukuran pesan (byte)",
+                y_label=f"{trend_metric} ({metric_unit})",
+                color="image_name",
+                width="stretch",
+                height=300,
+            )
+
+    with chart_cols[1]:
+        st.markdown("**Dampak kompresi JPEG**")
+        jpeg_labels = {
+            "destroyed": "Payload rusak",
+            "survived": "Payload bertahan",
+            "not_run": "Tidak diuji",
+        }
+        jpeg_counts = (
+            filtered_df["jpeg_attack_result"]
+            .map(jpeg_labels)
+            .value_counts()
+            .rename_axis("Hasil JPEG")
+            .reset_index(name="Jumlah kasus")
+        )
+        if jpeg_counts.empty:
+            st.info("Belum ada hasil uji JPEG untuk filter ini.")
+        else:
+            st.bar_chart(
+                jpeg_counts,
+                x="Hasil JPEG",
+                y="Jumlah kasus",
+                width="stretch",
+                height=300,
+            )
+
+    if len(jpeg_tested):
+        st.info(
+            f"Kompresi JPEG merusak payload pada {jpeg_destroyed_count} dari "
+            f"{len(jpeg_tested)} pengujian. Ini menunjukkan kerapuhan LSB terhadap "
+            "penyimpanan lossy; gunakan PNG atau BMP untuk membawa pesan."
+        )
+
+    st.subheader("Data eksperimen")
+    display_columns = [
+        "image_name",
+        "width",
+        "height",
+        "message_size_bytes",
+        "payload_size_bytes",
+        "capacity_utilization_percent",
+        "mse",
+        "psnr",
+        "embed_success",
+        "extract_success",
+        "jpeg_attack_result",
+        "error",
+    ]
+    column_labels = {
+        "image_name": "Gambar",
+        "width": "Lebar",
+        "height": "Tinggi",
+        "message_size_bytes": "Pesan (byte)",
+        "payload_size_bytes": "Payload (byte)",
+        "capacity_utilization_percent": "Kapasitas terpakai (%)",
+        "mse": "MSE",
+        "psnr": "PSNR (dB)",
+        "embed_success": "Penyisipan berhasil",
+        "extract_success": "Ekstraksi berhasil",
+        "jpeg_attack_result": "Hasil JPEG",
+        "error": "Catatan",
+    }
+    visible_df = filtered_df[display_columns].rename(columns=column_labels)
+    visible_df["Hasil JPEG"] = visible_df["Hasil JPEG"].map(
+        {
+            "destroyed": "Payload rusak",
+            "survived": "Payload bertahan",
+            "not_run": "Tidak diuji",
+        }
+    )
+    visible_df["Penyisipan berhasil"] = visible_df["Penyisipan berhasil"].map(
+        {True: "Ya", False: "Tidak"}
+    )
+    visible_df["Ekstraksi berhasil"] = visible_df["Ekstraksi berhasil"].map(
+        {True: "Ya", False: "Tidak"}
+    )
+    st.dataframe(visible_df, width="stretch", hide_index=True)
+
+    st.subheader("Detail kasus")
+    detail_rows = filtered_df.reset_index(drop=True)
+    detail_labels = [
+        f"{row['image_name']} · pesan {row['message_size_bytes']} byte · "
+        f"{'berhasil' if row['overall_success'] else 'gagal'}"
+        for _, row in detail_rows.iterrows()
+    ]
+    if st.session_state.get("lab_detail_case") not in detail_labels:
+        st.session_state["lab_detail_case"] = detail_labels[0]
+    selected_detail_label = st.selectbox(
+        "Pilih kasus untuk melihat hasilnya",
+        detail_labels,
+        key="lab_detail_case",
+    )
+    detail_index = detail_labels.index(selected_detail_label)
+    detail = detail_rows.iloc[detail_index]
+    detail_cols = st.columns(3)
+    detail_cols[0].metric(
+        "Resolusi gambar", f"{detail['width']} × {detail['height']} px"
+    )
+    detail_cols[1].metric(
+        "PSNR", f"{detail['psnr']:.2f} dB" if pd.notna(detail["psnr"]) else "—"
+    )
+    detail_cols[2].metric(
+        "Kapasitas terpakai", f"{detail['capacity_utilization_percent']:.2f}%"
+    )
+    if detail["overall_success"]:
+        st.success("Penyisipan, ekstraksi, dan pemulihan pesan berhasil.")
+    else:
+        st.error("Kasus ini gagal. Periksa kapasitas gambar atau catatan error di bawah.")
+    if detail["error"]:
+        st.code(str(detail["error"]), language=None)
+
+    export_df = visible_df
+    download_cols = st.columns(2)
+    with download_cols[0]:
+        st.download_button(
+            "Unduh hasil terfilter (CSV)",
+            data=export_df.to_csv(index=False).encode("utf-8-sig"),
+            file_name="stegochat_laboratory_filtered.csv",
+            mime="text/csv",
+            width="stretch",
+        )
+    with download_cols[1]:
+        workbook = io.BytesIO()
+        with pd.ExcelWriter(workbook, engine="openpyxl") as writer:
+            results_df.drop(columns=["overall_success"]).to_excel(
+                writer, index=False, sheet_name="Hasil eksperimen"
+            )
+            visible_df.to_excel(writer, index=False, sheet_name="Filter aktif")
+        st.download_button(
+            "Unduh seluruh hasil (XLSX)",
+            data=workbook.getvalue(),
+            file_name="laboratory_results.xlsx",
+            mime=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+            width="stretch",
+        )
 
 
 def tab_laboratory() -> None:
@@ -1126,7 +1820,7 @@ def tab_laboratory() -> None:
                                 )
                             ),
                             caption=f"{name} Channel",
-                            use_container_width=True,
+                            width="stretch",
                         )
 
                 st.subheader("Stego LSB Planes")
@@ -1154,7 +1848,7 @@ def tab_laboratory() -> None:
                                 )
                             ),
                             caption=f"{name} Channel",
-                            use_container_width=True,
+                            width="stretch",
                         )
 
                 st.subheader("Changed LSB Pixels")
@@ -1167,7 +1861,7 @@ def tab_laboratory() -> None:
                         "Pixels with LSB modifications "
                         "(white = changed)"
                     ),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
                 st.info(
@@ -1181,305 +1875,10 @@ def tab_laboratory() -> None:
                 st.error(f"Error: {str(e)}")
 
     with tab3:
-        st.subheader("JPEG Fragility Attack")
-
-        cover_upload = st.file_uploader(
-            "Upload Cover Image",
-            type=["png", "bmp"],
-            key="jpeg_cover",
-        )
-
-        message = st.text_area(
-            "Message to Test",
-            height=50,
-            key="jpeg_message",
-        )
-
-        stego_key = st.text_input(
-            "Stego Key",
-            type="password",
-            key="jpeg_key",
-        )
-
-        if cover_upload and message and stego_key:
-            try:
-                cover_image = Image.open(
-                    cover_upload
-                ).convert("RGB")
-
-                stego_key_bytes = stego_key.encode("utf-8")
-
-                if st.button(
-                    "Run JPEG Attack Test",
-                    type="primary",
-                ):
-                    with st.spinner(
-                        "Running JPEG attack test..."
-                    ):
-                        result = run_jpeg_fragility_test(
-                            cover_image,
-                            message,
-                            stego_key_bytes,
-                            quality=85,
-                        )
-
-                        st.subheader("Results")
-
-                        st.json(
-                            {
-                                "quality": result.quality,
-                                "jpeg_created": result.jpeg_created,
-                                "jpeg_size_bytes": result.jpeg_size_bytes,
-                                "extraction_succeeded": result.extraction_succeeded,
-                                "decryption_succeeded": result.decryption_succeeded,
-                                "recovered_plaintext": result.recovered_plaintext,
-                                "plaintext_matches": result.plaintext_matches,
-                                "attack_destroyed_payload": result.attack_destroyed_payload,
-                                "error_stage": result.error_stage,
-                                "error_type": result.error_type,
-                                "error_reason": result.error_reason,
-                            }
-                        )
-
-                        if result.attack_destroyed_payload:
-                            st.warning(
-                                "⚠️ JPEG attack successfully destroyed the payload!"
-                            )
-                        else:
-                            st.success(
-                                "✅ Payload survived JPEG compression!"
-                            )
-
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
+        _render_jpeg_attack_panel()
 
     with tab4:
-        st.subheader("Laboratory Experiment Runner")
-
-        image_dir = "data/test_images"
-
-        try:
-            import os
-
-            image_files = [
-                f
-                for f in os.listdir(image_dir)
-                if f.lower().endswith(
-                    (".png", ".bmp")
-                )
-            ]
-
-        except FileNotFoundError:
-            st.error(
-                f"Test images directory not found: {image_dir}"
-            )
-            image_files = []
-
-        if image_files:
-            selected_images = st.multiselect(
-                "Select Test Images",
-                image_files,
-                default=image_files[
-                    : min(5, len(image_files))
-                ],
-            )
-
-            message_sizes = st.multiselect(
-                "Select Message Sizes (bytes)",
-                [10, 50, 100, 200, 500],
-                default=[10, 50, 100],
-            )
-
-            stego_key = st.text_input(
-                "Stego Key for Testing",
-                value="test-secret-key",
-                key="lab_key",
-            )
-
-            if st.button(
-                "Run Laboratory Experiments",
-                type="primary",
-            ):
-                if (
-                    not selected_images
-                    or not message_sizes
-                ):
-                    st.warning(
-                        "Please select at least one image "
-                        "and one message size"
-                    )
-
-                else:
-                    stego_key_bytes = (
-                        stego_key.encode("utf-8")
-                    )
-
-                    results: list[dict[str, Any]] = []
-
-                    progress_bar = st.progress(0)
-
-                    total_cases = (
-                        len(selected_images)
-                        * len(message_sizes)
-                    )
-
-                    current_case = 0
-
-                    for image_file in selected_images:
-                        try:
-                            cover_path = (
-                                f"{image_dir}/{image_file}"
-                            )
-
-                            cover_image = Image.open(
-                                cover_path
-                            ).convert("RGB")
-
-                            width, height = (
-                                cover_image.size
-                            )
-
-                            capacity = (
-                                width * height * 3
-                            )
-
-                            for msg_size in message_sizes:
-                                current_case += 1
-
-                                progress = (
-                                    current_case
-                                    / total_cases
-                                )
-
-                                progress_bar.progress(
-                                    progress
-                                )
-
-                                message = (
-                                    "X" * msg_size
-                                )
-
-                                result = (
-                                    run_laboratory_experiment(
-                                        cover_image,
-                                        message,
-                                        stego_key_bytes,
-                                    )
-                                )
-
-                                payload_bits = (
-                                    34
-                                    + msg_size
-                                    + 16
-                                ) * 8
-
-                                capacity_utilization = (
-                                    (
-                                        payload_bits
-                                        / capacity
-                                    ) * 100
-                                    if capacity > 0
-                                    else 0
-                                )
-
-                                results.append(
-                                    {
-                                        "image_name": image_file,
-                                        "width": width,
-                                        "height": height,
-                                        "capacity_bits": capacity,
-                                        "capacity_bytes": capacity // 8,
-                                        "message_size_bytes": msg_size,
-                                        "payload_size_bytes": payload_bits // 8,
-                                        "capacity_utilization_percent": round(
-                                            capacity_utilization,
-                                            2,
-                                        ),
-                                        "mse": (
-                                            round(
-                                                result["mse"],
-                                                4,
-                                            )
-                                            if result["mse"]
-                                            is not None
-                                            else None
-                                        ),
-                                        "psnr": (
-                                            round(
-                                                result["psnr"],
-                                                2,
-                                            )
-                                            if result["psnr"]
-                                            is not None
-                                            else None
-                                        ),
-                                        "embed_success": result[
-                                            "embed_success"
-                                        ],
-                                        "extract_success": result[
-                                            "extract_success"
-                                        ],
-                                        "jpeg_attack_result": (
-                                            "destroyed"
-                                            if result[
-                                                "jpeg_destroyed_payload"
-                                            ]
-                                            else "survived"
-                                        ),
-                                        "error": result[
-                                            "error"
-                                        ],
-                                    }
-                                )
-
-                        except Exception as e:
-                            st.error(
-                                f"Error processing "
-                                f"{image_file}: {str(e)}"
-                            )
-
-                    progress_bar.empty()
-
-                    st.subheader(
-                        "Experiment Results"
-                    )
-
-                    df = pd.DataFrame(results)
-
-                    st.dataframe(
-                        df,
-                        use_container_width=True,
-                    )
-
-                    if st.button(
-                        "Download Results as XLSX"
-                    ):
-                        output = io.BytesIO()
-
-                        with pd.ExcelWriter(
-                            output,
-                            engine="openpyxl",
-                        ) as writer:
-                            df.to_excel(
-                                writer,
-                                index=False,
-                                sheet_name="Results",
-                            )
-
-                        output.seek(0)
-
-                        st.download_button(
-                            label="Download XLSX",
-                            data=output.getvalue(),
-                            file_name=(
-                                "laboratory_results.xlsx"
-                            ),
-                            mime=(
-                                "application/"
-                                "vnd.openxmlformats-officedocument."
-                                "spreadsheetml.sheet"
-                            ),
-                        )
+        _render_laboratory_runner()
 
     with tab5:
         st.subheader(
@@ -1518,7 +1917,7 @@ def tab_laboratory() -> None:
 
                 st.dataframe(
                     pd.DataFrame(rows),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
                 suspected = (
@@ -1532,9 +1931,16 @@ def tab_laboratory() -> None:
                         "mengandung pesan tersembunyi."
                     )
                 else:
-                    st.success(
-                        "✅ Distribusi Pairs-of-Values terlihat natural — "
-                        "citra ini kemungkinan besar TIDAK mengandung pesan."
+                    st.markdown(
+                        '<div class="chi-square-success" role="status">'
+                        '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+                        '<circle cx="12" cy="12" r="9"/>'
+                        '<path d="m8 12.2 2.6 2.6 5.4-5.4"/>'
+                        '</svg>'
+                        '<span>Distribusi Pairs-of-Values terlihat natural — '
+                        'citra ini kemungkinan besar TIDAK mengandung pesan.</span>'
+                        '</div>',
+                        unsafe_allow_html=True,
                     )
 
             except Exception as e:
@@ -1551,6 +1957,24 @@ def tab_laboratory() -> None:
 # ============================================================================
 # MAIN APP
 # ============================================================================
+
+
+def render_footer() -> None:
+    """Render the shared footer on the welcome and application screens."""
+    st.markdown(
+        '<footer class="app-footer" role="contentinfo">'
+        '<div class="app-footer-brand">'
+        '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+        '<rect x="4" y="10" width="16" height="10" rx="2"/>'
+        '<path d="M8 10V7a4 4 0 0 1 8 0v3"/>'
+        '<path d="M12 14v2"/>'
+        '</svg>'
+        '<span>STEGOCHAT</span>'
+        '</div>'
+        '<p class="app-footer-note">An educational project in cryptography and steganography.</p>'
+        '</footer>',
+        unsafe_allow_html=True,
+    )
 
 
 def show_welcome() -> None:
@@ -1614,7 +2038,7 @@ def show_welcome() -> None:
             if st.button(
                 "START STEGOCHAT  →",
                 type="primary",
-                use_container_width=True,
+                width="stretch",
                 key="start_stegochat",
             ):
                 st.session_state["started"] = True
@@ -1622,12 +2046,32 @@ def show_welcome() -> None:
 
         st.markdown(
             '<div class="welcome-features">'
-            '<span>🔐 AES-256-GCM</span>'
-            '<span>🖼️ LSB STEGANOGRAPHY</span>'
-            '<span>🛡️ AUTHENTICATED PAYLOAD</span>'
+            '<span class="welcome-feature">'
+            '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+            '<rect x="4" y="10" width="16" height="10" rx="2"/>'
+            '<path d="M8 10V7a4 4 0 0 1 8 0v3"/>'
+            '<path d="M12 14v2"/>'
+            '</svg><span>AES-256-GCM</span></span>'
+            '<span class="welcome-feature">'
+            '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+            '<rect x="3" y="5" width="18" height="14" rx="2"/>'
+            '<circle cx="8" cy="10" r="1.5"/>'
+            '<path d="m4 17 5-5 4 4 3-3 4 4"/>'
+            '</svg><span>LSB STEGANOGRAPHY</span></span>'
+            '<span class="welcome-feature">'
+            '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+            '<path d="M12 3 19 6v5c0 4.4-3 7.4-7 9.5C8 18.4 5 15.4 5 11V6l7-3Z"/>'
+            '<path d="m9 12 2 2 4-4"/>'
+            '</svg><span>AUTHENTICATED PAYLOAD</span></span>'
             '</div>',
             unsafe_allow_html=True,
         )
+        render_footer()
+
+
+def return_to_welcome() -> None:
+    """Return to the welcome screen before Streamlit reruns the app."""
+    st.session_state["started"] = False
 
 
 def main() -> None:
@@ -1647,13 +2091,12 @@ def main() -> None:
     )
 
     with header_left:
-        if st.button(
+        st.button(
             "←",
             key="back_to_welcome",
             help="Kembali ke halaman awal",
-        ):
-            st.session_state["started"] = False
-            st.rerun()
+            on_click=return_to_welcome,
+        )
 
     with header_center:
         st.markdown(
@@ -1698,6 +2141,8 @@ def main() -> None:
 
     with tab3:
         tab_laboratory()
+
+    render_footer()
 
 
 if __name__ == "__main__":
