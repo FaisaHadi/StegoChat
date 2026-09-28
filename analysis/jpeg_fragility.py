@@ -61,7 +61,8 @@ def run_jpeg_fragility_test(
     png_round_trip = _round_trip(stego_rgb, PNG_FORMAT, quality=None)
 
     try:
-        jpeg_round_trip = _round_trip(png_round_trip, JPEG_FORMAT, quality=quality)
+        jpeg_bytes = serialize_image(png_round_trip, JPEG_FORMAT, quality=quality)
+        jpeg_round_trip = _decode_image(jpeg_bytes)
     except OSError as error:
         return JpegFragilityResult(
             quality=quality,
@@ -76,7 +77,13 @@ def run_jpeg_fragility_test(
             error_reason=str(error),
         )
 
-    return _extraction_outcome(jpeg_round_trip, plaintext, stego_key_bytes, quality)
+    return _extraction_outcome(
+        jpeg_round_trip,
+        plaintext,
+        stego_key_bytes,
+        quality,
+        jpeg_size_bytes=len(jpeg_bytes),
+    )
 
 
 def run_jpeg_quality_sweep(
@@ -107,6 +114,11 @@ def _round_trip(
     image_rgb: Image.Image, image_format: str, quality: int | None
 ) -> Image.Image:
     encoded = serialize_image(image_rgb, image_format, quality)
+    return _decode_image(encoded)
+
+
+def _decode_image(encoded: bytes) -> Image.Image:
+    """Decode encoded image bytes into an RGB image."""
     with Image.open(io.BytesIO(encoded)) as reopened:
         reopened.load()
         return reopened.convert("RGB")
@@ -117,17 +129,15 @@ def _extraction_outcome(
     plaintext: str,
     stego_key_bytes: bytes,
     quality: int,
+    jpeg_size_bytes: int,
 ) -> JpegFragilityResult:
-    jpeg_size = len(
-        serialize_image(jpeg_rgb, PNG_FORMAT, quality=None)
-    )
     try:
         recovered = extract_plaintext(jpeg_rgb, stego_key_bytes)
     except Exception as error:  # noqa: BLE001 - outcome is recorded, not hidden
         return JpegFragilityResult(
             quality=quality,
             jpeg_created=True,
-            jpeg_size_bytes=jpeg_size,
+            jpeg_size_bytes=jpeg_size_bytes,
             extraction_succeeded=False,
             decryption_succeeded=False,
             recovered_plaintext=None,
@@ -140,7 +150,7 @@ def _extraction_outcome(
     return JpegFragilityResult(
         quality=quality,
         jpeg_created=True,
-        jpeg_size_bytes=jpeg_size,
+        jpeg_size_bytes=jpeg_size_bytes,
         extraction_succeeded=True,
         decryption_succeeded=True,
         recovered_plaintext=recovered,

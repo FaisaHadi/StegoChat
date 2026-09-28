@@ -1988,8 +1988,8 @@ def tab_laboratory() -> None:
                         '<circle cx="12" cy="12" r="9"/>'
                         '<path d="m8 12.2 2.6 2.6 5.4-5.4"/>'
                         '</svg>'
-                        '<span>Distribusi Pairs-of-Values terlihat natural — '
-                        'citra ini kemungkinan besar TIDAK mengandung pesan.</span>'
+                        '<span>Pesan tidak terdeteksi oleh uji Chi-Square pada '
+                        'tingkat pengisian dan karakteristik citra ini.</span>'
                         '</div>',
                         unsafe_allow_html=True,
                     )
