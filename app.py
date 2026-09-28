@@ -561,10 +561,12 @@ st.markdown(
     }
 
     .app-footer {
-        display: flex;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(21rem, auto);
+        grid-template-areas: "brand team" "note team";
         align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
+        column-gap: 2rem;
+        row-gap: 0.35rem;
         width: 100%;
         margin-top: 2.5rem;
         padding: 1.1rem 0 0.25rem;
@@ -575,6 +577,7 @@ st.markdown(
     }
 
     .app-footer-brand {
+        grid-area: brand;
         display: inline-flex;
         align-items: center;
         gap: 0.55rem;
@@ -596,8 +599,48 @@ st.markdown(
     }
 
     .app-footer-note {
+        grid-area: note;
         margin: 0;
-        text-align: right;
+        text-align: left;
+    }
+
+    .app-footer-team {
+        grid-area: team;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: baseline;
+        column-gap: 1.25rem;
+        row-gap: 0.2rem;
+        min-width: 21rem;
+        font-size: 0.74rem;
+        line-height: 1.55;
+    }
+
+    .app-footer-team-title {
+        grid-column: 1 / -1;
+        margin: 0 0 0.1rem;
+        color: #CBD5E1;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+
+    .app-footer-member-name {
+        color: #CBD5E1;
+    }
+
+    .app-footer-column-label {
+        color: #64748B;
+        font-size: 0.64rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .app-footer-member-id {
+        color: #94A3B8;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
     }
 
     /* Keep the welcome controls close to the card instead of pushing them to
@@ -720,6 +763,7 @@ st.markdown(
     .main .block-container,
     [data-testid="stMainBlockContainer"] {
         padding-top: 4rem !important;
+        padding-bottom: 0.5rem !important;
     }
 
     /* ============ RESPONSIVE ============ */
@@ -728,7 +772,7 @@ st.markdown(
         .main .block-container,
         [data-testid="stMainBlockContainer"],
         [data-testid="BlockContainer"] {
-            padding: 3.75rem 1.25rem 2rem 1.25rem !important;
+            padding: 3.75rem 1.25rem 1rem 1.25rem !important;
         }
 
         div.st-key-welcome_screen {
@@ -737,10 +781,17 @@ st.markdown(
         }
 
         .app-footer {
-            align-items: flex-start;
-            flex-direction: column;
-            gap: 0.45rem;
+            grid-template-columns: minmax(0, 1fr);
+            grid-template-areas: "brand" "team" "note";
+            align-items: start;
+            row-gap: 0.75rem;
             margin-top: 2rem;
+        }
+
+        .app-footer-team {
+            width: min(100%, 28rem);
+            min-width: 0;
+            column-gap: 0.75rem;
         }
 
         .app-footer-note {
@@ -1970,6 +2021,15 @@ def render_footer() -> None:
         '<path d="M12 14v2"/>'
         '</svg>'
         '<span>STEGOCHAT</span>'
+        '</div>'
+        '<div class="app-footer-team" aria-label="Identitas kelompok">'
+        '<p class="app-footer-team-title">Kelompok 11</p>'
+        '<span class="app-footer-member-name">Faisal Hadi Saik</span>'
+        '<span class="app-footer-member-id">247006111052</span>'
+        '<span class="app-footer-member-name">Fadhila Hendani</span>'
+        '<span class="app-footer-member-id">247006111053</span>'
+        '<span class="app-footer-member-name">Irsyad Khoerul Umam</span>'
+        '<span class="app-footer-member-id">247006111055</span>'
         '</div>'
         '<p class="app-footer-note">An educational project in cryptography and steganography.</p>'
         '</footer>',

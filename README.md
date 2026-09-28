@@ -4,6 +4,16 @@ StegoChat adalah proyek UTS yang mengenkripsi pesan menggunakan AES-256-GCM dan 
 
 Protokol yang disepakati didokumentasikan di [System Design V1](docs/system-design-v1.md). Ruang lingkup pengerjaan dan perencanaan tim ada di [planning.md](docs/planning.md).
 
+## Identitas Kelompok
+
+**Kelompok 11**
+
+| Nama | NIM |
+| --- | --- |
+| Faisal Hadi Saik | 247006111052 |
+| Fadhila Hendani | 247006111053 |
+| Irsyad Khoerul Umam | 247006111055 |
+
 ## Pipeline inti yang sudah diimplementasikan
 
 Embedding (plaintext ke stego image):
