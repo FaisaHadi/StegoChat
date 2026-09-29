@@ -7,9 +7,10 @@ import secrets
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
+from crypto.aes import AES_KEY_LENGTH
+from stego.payload import SALT_LENGTH
+
 PBKDF2_ITERATIONS = 100_000
-SALT_LENGTH = 16
-AES_KEY_LENGTH = 32
 
 
 def generate_salt() -> bytes:

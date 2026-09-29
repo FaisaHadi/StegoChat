@@ -6,9 +6,9 @@ import secrets
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from stego.payload import AUTH_TAG_LENGTH, NONCE_LENGTH
+
 AES_KEY_LENGTH = 32
-NONCE_LENGTH = 12
-AUTH_TAG_LENGTH = 16
 
 
 def generate_nonce() -> bytes:

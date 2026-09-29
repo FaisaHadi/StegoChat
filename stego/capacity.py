@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from stego.payload import HEADER_SIZE, MIN_BODY_LENGTH
+from stego.payload import AUTH_TAG_LENGTH, HEADER_SIZE, MIN_BODY_LENGTH
 
 RGB_CHANNELS = 3
 BITS_PER_BYTE = 8
@@ -34,6 +34,15 @@ def max_body_length(width: int, height: int) -> int:
     """
     remaining_bits = capacity_bits(width, height) - HEADER_BITS
     return max(0, remaining_bits // BITS_PER_BYTE)
+
+
+def max_plaintext_bytes(width: int, height: int) -> int:
+    """Return the UTF-8 byte limit after reserving the header and auth tag.
+
+    A zero limit does not guarantee even an empty payload fits; use can_embed
+    to validate the complete payload before embedding.
+    """
+    return max(0, max_body_length(width, height) - AUTH_TAG_LENGTH)
 
 
 def _validate_dimension(name: str, value: int) -> None:

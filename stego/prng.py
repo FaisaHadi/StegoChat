@@ -7,11 +7,12 @@ import hmac
 from bisect import bisect_right
 from collections.abc import Iterable
 
+from stego.capacity import HEADER_BITS, RGB_CHANNELS
+from stego.payload import SALT_LENGTH
+
 Position = tuple[int, int, int]
 
-RGB_CHANNELS = 3
-HEADER_POSITION_COUNT = 272
-SALT_LENGTH = 16
+HEADER_POSITION_COUNT = HEADER_BITS
 _HEADER_CONTEXT = b"STEGOCHAT-HEADER"
 _BODY_CONTEXT = b"STEGOCHAT-BODY"
 _POSITION_CONTEXT = b"STEGOCHAT-POSITIONS-V1"

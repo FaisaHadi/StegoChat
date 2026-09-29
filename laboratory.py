@@ -7,14 +7,15 @@ the StegoChat system across multiple images and message sizes.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import asdict, dataclass, replace
 
 import pandas as pd
 from PIL import Image
 
-from analysis.jpeg_fragility import run_jpeg_fragility_test
-from analysis.metrics import calculate_mse, calculate_psnr
+from analysis.jpeg_fragility import run_jpeg_attack
+from analysis.metrics import calculate_mse, psnr_from_mse
+from stego.capacity import capacity_bits, required_bits
+from stego.payload import AUTH_TAG_LENGTH
 from stegochat.core import embed_plaintext, extract_plaintext
 
 
@@ -54,100 +55,77 @@ def run_experiment_case(
         ExperimentResult with all metrics and outcomes.
     """
     width, height = cover_image.size
-    capacity = width * height * 3
+    capacity = capacity_bits(width, height)
     msg_bytes = len(message.encode("utf-8"))
-    payload_bits = (34 + msg_bytes + 16) * 8
-    capacity_utilization = (payload_bits / capacity) * 100 if capacity > 0 else 0
+    payload_bits = required_bits(msg_bytes + AUTH_TAG_LENGTH)
+    result = ExperimentResult(
+        image_name="",
+        width=width,
+        height=height,
+        capacity_bits=capacity,
+        capacity_bytes=capacity // 8,
+        message_size_bytes=msg_bytes,
+        payload_size_bytes=payload_bits // 8,
+        capacity_utilization_percent=payload_bits / capacity * 100,
+        mse=None,
+        psnr=None,
+        embed_success=False,
+        extract_success=False,
+        jpeg_attack_result=None,
+        error=None,
+    )
+    if payload_bits > capacity:
+        return replace(result, error="capacity_exceeded")
+
+    # Each stage records its own outcome. Later errors must not erase successes.
+    try:
+        stego_image = embed_plaintext(cover_image, message, stego_key_bytes)
+    except Exception as error:
+        return replace(result, error=_stage_error("embed", error))
+    result = replace(result, embed_success=True)
+    errors: list[str] = []
 
     try:
-        # Embed
-        stego_image = embed_plaintext(cover_image, message, stego_key_bytes)
-
-        # Extract
         recovered = extract_plaintext(stego_image, stego_key_bytes)
-        extract_success = recovered == message
+        result = replace(result, extract_success=recovered == message)
+        if not result.extract_success:
+            errors.append("extract: plaintext_mismatch")
+    except Exception as error:
+        errors.append(_stage_error("extract", error))
 
-        # Metrics
+    try:
         mse = calculate_mse(cover_image, stego_image)
-        psnr = calculate_psnr(cover_image, stego_image)
+        result = replace(result, mse=mse)
+        result = replace(result, psnr=psnr_from_mse(mse))
+    except Exception as error:
+        errors.append(_stage_error("metrics", error))
 
-        # JPEG attack
-        jpeg_result = run_jpeg_fragility_test(
-            cover_image, message, stego_key_bytes, quality=85
+    try:
+        jpeg_result = run_jpeg_attack(
+            stego_image, message, stego_key_bytes
         )
-        jpeg_attack_result = (
-            "destroyed" if jpeg_result.attack_destroyed_payload else "survived"
-        )
-
-        return ExperimentResult(
-            image_name="",
-            width=width,
-            height=height,
-            capacity_bits=capacity,
-            capacity_bytes=capacity // 8,
-            message_size_bytes=msg_bytes,
-            payload_size_bytes=payload_bits // 8,
-            capacity_utilization_percent=round(capacity_utilization, 2),
-            mse=round(mse, 4),
-            psnr=round(psnr, 2),
-            embed_success=True,
-            extract_success=extract_success,
-            jpeg_attack_result=jpeg_attack_result,
-            error=None,
-        )
-
-    except ValueError as e:
-        if "insufficient" in str(e).lower():
-            return ExperimentResult(
-                image_name="",
-                width=width,
-                height=height,
-                capacity_bits=capacity,
-                capacity_bytes=capacity // 8,
-                message_size_bytes=msg_bytes,
-                payload_size_bytes=payload_bits // 8,
-                capacity_utilization_percent=round(capacity_utilization, 2),
-                mse=None,
-                psnr=None,
-                embed_success=False,
-                extract_success=False,
-                jpeg_attack_result=None,
-                error="capacity_exceeded",
+        if not jpeg_result.jpeg_created:
+            result = replace(result, jpeg_attack_result="error")
+            errors.append(
+                f"jpeg: {jpeg_result.error_type}: {jpeg_result.error_reason}"
             )
-        return ExperimentResult(
-            image_name="",
-            width=width,
-            height=height,
-            capacity_bits=capacity,
-            capacity_bytes=capacity // 8,
-            message_size_bytes=msg_bytes,
-            payload_size_bytes=payload_bits // 8,
-            capacity_utilization_percent=round(capacity_utilization, 2),
-            mse=None,
-            psnr=None,
-            embed_success=False,
-            extract_success=False,
-            jpeg_attack_result=None,
-            error=str(e),
-        )
+        else:
+            result = replace(
+                result,
+                jpeg_attack_result=(
+                    "destroyed" if jpeg_result.attack_destroyed_payload else "survived"
+                ),
+            )
+    except Exception as error:
+        result = replace(result, jpeg_attack_result="error")
+        errors.append(_stage_error("jpeg", error))
 
-    except Exception as e:
-        return ExperimentResult(
-            image_name="",
-            width=width,
-            height=height,
-            capacity_bits=capacity,
-            capacity_bytes=capacity // 8,
-            message_size_bytes=msg_bytes,
-            payload_size_bytes=payload_bits // 8,
-            capacity_utilization_percent=round(capacity_utilization, 2),
-            mse=None,
-            psnr=None,
-            embed_success=False,
-            extract_success=False,
-            jpeg_attack_result=None,
-            error=str(e),
-        )
+    return replace(result, error="; ".join(errors) or None)
+
+
+def _stage_error(stage: str, error: Exception) -> str:
+    """Include the stage and exception type, even for errors with empty text."""
+    return f"{stage}: {type(error).__name__}: {error}"
 
 
 def run_laboratory(
@@ -181,12 +159,7 @@ def run_laboratory(
 
                 result = run_experiment_case(cover_image, message, stego_key_bytes)
 
-                # Update image name in result
-                result_dict = result.__dict__.copy()
-                result_dict["image_name"] = image_name
-                updated_result = ExperimentResult(**result_dict)
-
-                results.append(updated_result)
+                results.append(replace(result, image_name=image_name))
 
         except FileNotFoundError:
             print(f"Warning: Image not found: {image_path}")
@@ -209,29 +182,7 @@ def export_results_to_xlsx(
         results: List of ExperimentResult objects.
         output_path: Path to save the XLSX file.
     """
-    data: list[dict[str, Any]] = []
-
-    for result in results:
-        data.append(
-            {
-                "image_name": result.image_name,
-                "width": result.width,
-                "height": result.height,
-                "capacity_bits": result.capacity_bits,
-                "capacity_bytes": result.capacity_bytes,
-                "message_size_bytes": result.message_size_bytes,
-                "payload_size_bytes": result.payload_size_bytes,
-                "capacity_utilization_percent": result.capacity_utilization_percent,
-                "mse": result.mse,
-                "psnr": result.psnr,
-                "embed_success": result.embed_success,
-                "extract_success": result.extract_success,
-                "jpeg_attack_result": result.jpeg_attack_result,
-                "error": result.error,
-            }
-        )
-
-    df = pd.DataFrame(data)
+    df = pd.DataFrame([asdict(result) for result in results])
     df.to_excel(output_path, index=False, sheet_name="Experiment Results")
 
 

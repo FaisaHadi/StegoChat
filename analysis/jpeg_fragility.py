@@ -12,6 +12,7 @@ from __future__ import annotations
 import io
 from dataclasses import dataclass
 
+from cryptography.exceptions import InvalidTag
 from PIL import Image
 
 from analysis.image_utils import require_rgb_image
@@ -59,9 +60,21 @@ def run_jpeg_fragility_test(
 
     stego_rgb = embed_plaintext(cover_rgb, plaintext, stego_key_bytes)
     png_round_trip = _round_trip(stego_rgb, PNG_FORMAT, quality=None)
+    return run_jpeg_attack(png_round_trip, plaintext, stego_key_bytes, quality)
+
+
+def run_jpeg_attack(
+    stego_rgb: Image.Image,
+    plaintext: str,
+    stego_key_bytes: bytes,
+    quality: int = DEFAULT_JPEG_QUALITY,
+) -> JpegFragilityResult:
+    """Recompress an existing stego image without embedding another payload."""
+    require_rgb_image(stego_rgb, "stego_rgb")
+    _validate_quality(quality)
 
     try:
-        jpeg_bytes = serialize_image(png_round_trip, JPEG_FORMAT, quality=quality)
+        jpeg_bytes = serialize_image(stego_rgb, JPEG_FORMAT, quality=quality)
         jpeg_round_trip = _decode_image(jpeg_bytes)
     except OSError as error:
         return JpegFragilityResult(
@@ -92,9 +105,17 @@ def run_jpeg_quality_sweep(
     stego_key_bytes: bytes,
     qualities: tuple[int, ...] = (95, 85, 75, 50),
 ) -> list[JpegFragilityResult]:
-    """Repeat the fragility test across several JPEG quality levels."""
+    """Compare JPEG qualities using independent copies of the same stego image."""
+    require_rgb_image(cover_rgb, "cover_rgb")
+    for quality in qualities:
+        _validate_quality(quality)
+    if not qualities:
+        return []
+
+    stego_rgb = embed_plaintext(cover_rgb, plaintext, stego_key_bytes)
+    png_round_trip = _round_trip(stego_rgb, PNG_FORMAT, quality=None)
     return [
-        run_jpeg_fragility_test(cover_rgb, plaintext, stego_key_bytes, quality)
+        run_jpeg_attack(png_round_trip, plaintext, stego_key_bytes, quality)
         for quality in qualities
     ]
 
@@ -133,7 +154,7 @@ def _extraction_outcome(
 ) -> JpegFragilityResult:
     try:
         recovered = extract_plaintext(jpeg_rgb, stego_key_bytes)
-    except Exception as error:  # noqa: BLE001 - outcome is recorded, not hidden
+    except (ValueError, InvalidTag) as error:
         return JpegFragilityResult(
             quality=quality,
             jpeg_created=True,
