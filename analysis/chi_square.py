@@ -13,6 +13,7 @@ from analysis.image_utils import require_rgb_image, to_rgb_array
 CHANNEL_NAMES: tuple[str, str, str] = ("R", "G", "B")
 PAIR_COUNT = 128  # 256 intensities grouped into (2i, 2i+1) pairs
 DEFAULT_SUSPICION_THRESHOLD = 0.5
+P_VALUE_DISPLAY_THRESHOLD = 1e-6
 
 
 @dataclass(frozen=True)
@@ -91,12 +92,19 @@ def chi_square_report_to_rows(
             "channel": name,
             "chi_square_statistic": round(result.chi_square_statistic, 4),
             "degrees_of_freedom": result.degrees_of_freedom,
-            "p_value": round(result.p_value, 6),
+            "p_value": result.p_value,
             "likely_contains_hidden_data": result.likely_contains_hidden_data(),
         }
         for name in CHANNEL_NAMES
         for result in [report.for_channel(name)]
     ]
+
+
+def format_p_value_for_display(p_value: float) -> str:
+    """Format a p-value for a human-readable table without implying zero."""
+    if p_value < P_VALUE_DISPLAY_THRESHOLD:
+        return "< 0,000001"
+    return f"{p_value:.6g}".replace(".", ",")
 
 
 def _channel_chi_square(

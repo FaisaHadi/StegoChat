@@ -19,7 +19,11 @@ from cryptography.exceptions import InvalidTag
 from PIL import Image
 
 from analysis.bitplane import compare_lsb_bit_planes, plane_to_image
-from analysis.chi_square import chi_square_report_to_rows, compute_chi_square_test
+from analysis.chi_square import (
+    chi_square_report_to_rows,
+    compute_chi_square_test,
+    format_p_value_for_display,
+)
 from analysis.histogram import compare_rgb_histograms
 from analysis.jpeg_fragility import run_jpeg_quality_sweep
 from analysis.metrics import calculate_mse, calculate_psnr
@@ -360,6 +364,56 @@ st.markdown(
         border: 1px solid #1F2937;
         border-radius: 10px;
         padding: 1rem;
+    }
+
+    .embed-output-summary {
+        display: grid;
+        gap: 0.55rem;
+        margin: 0.35rem 0 0.55rem;
+    }
+
+    .embed-success-banner {
+        padding: 0.65rem 0.9rem;
+        color: #4ADE80;
+        background: rgba(20, 83, 45, 0.65);
+        border: 1px solid rgba(34, 197, 94, 0.2);
+        border-radius: 10px;
+        line-height: 1.4;
+    }
+
+    .embed-metrics {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.6rem;
+    }
+
+    .embed-metric-card {
+        min-width: 0;
+        padding: 0.45rem 0.8rem;
+        background: #111827;
+        border: 1px solid #1F2937;
+        border-radius: 10px;
+    }
+
+    .embed-metric-label {
+        color: #CBD5E1;
+        font-size: 0.85rem;
+        margin-bottom: 0.2rem;
+    }
+
+    .embed-metric-value {
+        color: #E2E8F0;
+        font-size: clamp(1.15rem, 1.7vw, 1.55rem);
+        line-height: 1.2;
+        overflow-wrap: anywhere;
+    }
+
+    .embed-image-label {
+        margin-top: 0.65rem;
+        margin-bottom: 0.55rem;
+        color: #E2E8F0;
+        font-weight: 600;
+        line-height: 1.4;
     }
 
     .stAlert {
@@ -877,6 +931,16 @@ def tab_embed_send() -> None:
             on_change=clear_embed_result,
         )
 
+        if cover_upload is not None:
+            try:
+                cover_image = Image.open(
+                    io.BytesIO(cover_upload.getvalue())
+                ).convert("RGB")
+                st.markdown("**Cover · Citra asli**")
+                st.image(cover_image, width="stretch")
+            except Exception as error:
+                st.error(f"Unable to read cover image: {error}")
+
         message = st.text_area(
             "Message to Hide",
             height=100,
@@ -893,9 +957,8 @@ def tab_embed_send() -> None:
             on_change=clear_embed_result,
         )
 
-        if cover_upload and message and stego_key:
+        if cover_upload and cover_image is not None and message and stego_key:
             try:
-                cover_image = Image.open(cover_upload).convert("RGB")
                 stego_key_bytes = stego_key.encode("utf-8")
 
                 width, height = cover_image.size
@@ -943,22 +1006,27 @@ def tab_embed_send() -> None:
         st.subheader("Output")
 
         if embed_result is not None:
-            st.success("Message embedded successfully!")
-
-            metric_col1, metric_col2 = st.columns(2)
-
-            with metric_col1:
-                st.metric("MSE", f"{embed_result['mse']:.6g}")
-
-            with metric_col2:
-                st.metric("PSNR", f"{embed_result['psnr']:.2f} dB")
-
-            # Do not try to wrap a Streamlit element with raw HTML: Streamlit
-            # renders st.image as a separate DOM block, leaving an empty box.
-            st.image(
-                embed_result["image_bytes"],
-                width="stretch",
+            st.markdown(
+                f"""
+                <div class="embed-output-summary">
+                    <div class="embed-success-banner">Message embedded successfully!</div>
+                    <div class="embed-metrics">
+                        <div class="embed-metric-card">
+                            <div class="embed-metric-label">MSE</div>
+                            <div class="embed-metric-value">{embed_result['mse']:.6g}</div>
+                        </div>
+                        <div class="embed-metric-card">
+                            <div class="embed-metric-label">PSNR</div>
+                            <div class="embed-metric-value">{embed_result['psnr']:.2f} dB</div>
+                        </div>
+                    </div>
+                    <div class="embed-image-label">Stego · Hasil penyisipan</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
+
+            st.image(embed_result["image_bytes"], width="stretch")
 
             # Teks hasil penyisipan berada di bawah kotak
             st.markdown(
@@ -1020,6 +1088,14 @@ def tab_extract_read() -> None:
             key="extract_image",
             on_change=clear_extract_result,
         )
+
+        if stego_upload is not None:
+            st.markdown("**Stego · Gambar yang diekstrak**")
+            try:
+                with Image.open(io.BytesIO(stego_upload.getvalue())) as source:
+                    st.image(source.convert("RGB"), width="stretch")
+            except OSError:
+                st.caption("Pratinjau tidak tersedia untuk file gambar ini.")
 
         stego_key = st.text_input(
             "Stego Key (Password)",
@@ -1117,6 +1193,19 @@ def tab_extract_read() -> None:
 # ============================================================================
 
 
+def _render_uploaded_image_preview(uploaded_file: Any, label: str) -> None:
+    """Show an uploaded image as a preview without consuming its file buffer."""
+    if uploaded_file is None:
+        return
+
+    st.markdown(f"**{label}**")
+    try:
+        with Image.open(io.BytesIO(uploaded_file.getvalue())) as source:
+            st.image(source.convert("RGB"), width="stretch")
+    except OSError:
+        st.caption("Pratinjau tidak tersedia untuk file gambar ini.")
+
+
 def _render_jpeg_attack_panel() -> None:
     """Render an interactive quality sweep for the LSB JPEG fragility test."""
     st.subheader("Uji kerapuhan kompresi JPEG")
@@ -1129,6 +1218,9 @@ def _render_jpeg_attack_panel() -> None:
         type=["png", "bmp"],
         key="jpeg_cover",
     )
+    preview_column, _ = st.columns(2)
+    with preview_column:
+        _render_uploaded_image_preview(cover_upload, "Cover · Citra asli")
     message = st.text_area("Pesan uji", height=70, key="jpeg_message")
     stego_key = st.text_input(
         "Stego-key",
@@ -1298,19 +1390,29 @@ def _render_laboratory_runner() -> None:
     if not image_files:
         st.info("Belum ada gambar bawaan. Kamu tetap bisa mengunggah gambar sendiri.")
 
+    uploaded_images = st.file_uploader(
+        "Unggah gambar uji sendiri (PNG/BMP)",
+        type=["png", "bmp"],
+        accept_multiple_files=True,
+        key="lab_uploaded_images",
+        help="Gambar yang diunggah akan digabung dengan pilihan bawaan saat eksperimen dijalankan.",
+    )
+    if uploaded_images:
+        st.markdown("**Pratinjau gambar uji yang diunggah**")
+        for start in range(0, len(uploaded_images), 2):
+            preview_columns = st.columns(2)
+            for column, uploaded in zip(
+                preview_columns, uploaded_images[start : start + 2]
+            ):
+                with column:
+                    _render_uploaded_image_preview(uploaded, uploaded.name)
+
     with st.form("lab_experiment_form", border=False):
         selected_images = st.multiselect(
             "Gambar uji bawaan",
             image_files,
             default=image_files[: min(5, len(image_files))],
             help="Pilih gambar yang sudah tersedia di folder gambar uji proyek.",
-        )
-        uploaded_images = st.file_uploader(
-            "Unggah gambar uji sendiri (PNG/BMP)",
-            type=["png", "bmp"],
-            accept_multiple_files=True,
-            key="lab_uploaded_images",
-            help="Gambar yang diunggah akan digabung dengan pilihan bawaan saat eksperimen dijalankan.",
         )
         message_sizes = st.multiselect(
             "Ukuran pesan (byte)",
@@ -1714,12 +1816,17 @@ def tab_laboratory() -> None:
             type=["png", "bmp"],
             key="hist_cover",
         )
-
         stego_upload = st.file_uploader(
             "Upload Stego Image",
             type=["png", "bmp"],
             key="hist_stego",
         )
+
+        preview_columns = st.columns(2)
+        with preview_columns[0]:
+            _render_uploaded_image_preview(cover_upload, "Cover · Citra asli")
+        with preview_columns[1]:
+            _render_uploaded_image_preview(stego_upload, "Stego · Hasil penyisipan")
 
         if cover_upload and stego_upload:
             try:
@@ -1735,6 +1842,7 @@ def tab_laboratory() -> None:
                     2,
                     3,
                     figsize=(15, 8),
+                    constrained_layout=True,
                 )
 
                 channels = ["R", "G", "B"]
@@ -1752,10 +1860,12 @@ def tab_laboratory() -> None:
                     )
 
                     axes[0, i].set_title(
-                        f"Cover {channel} Channel"
+                        f"Cover {channel} Channel",
+                        fontsize=11,
                     )
-                    axes[0, i].set_xlabel("Intensity")
-                    axes[0, i].set_ylabel("Count")
+                    axes[0, i].set_xlabel("Intensity", fontsize=9)
+                    axes[0, i].set_ylabel("Count", fontsize=9)
+                    axes[0, i].tick_params(axis="both", labelsize=8)
 
                     axes[1, i].bar(
                         range(256),
@@ -1766,13 +1876,15 @@ def tab_laboratory() -> None:
                     )
 
                     axes[1, i].set_title(
-                        f"Stego {channel} Channel"
+                        f"Stego {channel} Channel",
+                        fontsize=11,
                     )
-                    axes[1, i].set_xlabel("Intensity")
-                    axes[1, i].set_ylabel("Count")
+                    axes[1, i].set_xlabel("Intensity", fontsize=9)
+                    axes[1, i].set_ylabel("Count", fontsize=9)
+                    axes[1, i].tick_params(axis="both", labelsize=8)
 
-                plt.tight_layout()
                 st.pyplot(fig)
+                plt.close(fig)
 
                 st.info(
                     f"**Total changed bins:** "
@@ -1790,12 +1902,17 @@ def tab_laboratory() -> None:
             type=["png", "bmp"],
             key="plane_cover",
         )
-
         stego_upload = st.file_uploader(
             "Upload Stego Image",
             type=["png", "bmp"],
             key="plane_stego",
         )
+
+        preview_columns = st.columns(2)
+        with preview_columns[0]:
+            _render_uploaded_image_preview(cover_upload, "Cover · Citra asli")
+        with preview_columns[1]:
+            _render_uploaded_image_preview(stego_upload, "Stego · Hasil penyisipan")
 
         if cover_upload and stego_upload:
             try:
@@ -1913,6 +2030,11 @@ def tab_laboratory() -> None:
             type=["png", "bmp"],
             key="chi_image",
         )
+        preview_column, _ = st.columns(2)
+        with preview_column:
+            _render_uploaded_image_preview(
+                test_upload, "Citra · Gambar yang dianalisis"
+            )
 
         if test_upload:
             try:
@@ -1927,13 +2049,20 @@ def tab_laboratory() -> None:
                 rows = chi_square_report_to_rows(
                     report
                 )
+                display_rows = [
+                    {
+                        **row,
+                        "p_value": format_p_value_for_display(row["p_value"]),
+                    }
+                    for row in rows
+                ]
 
                 st.subheader(
                     "Hasil per Channel"
                 )
 
                 st.dataframe(
-                    pd.DataFrame(rows),
+                    pd.DataFrame(display_rows),
                     width="stretch",
                 )
 

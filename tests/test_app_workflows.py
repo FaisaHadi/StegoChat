@@ -65,10 +65,17 @@ def test_changed_embed_input_clears_result_and_download(changed):
 
 def test_download_and_unrelated_rerun_keep_same_embedded_payload():
     app = new_app()
-    ready_to_embed(app)
+    cover = uploaded_cover()
+    ready_to_embed(app, cover=cover)
     button(app, "Embed Message").click().run()
     assert not app.exception
     payload = app.session_state["embed_result"]["image_bytes"]
+    assert any("Cover · Citra asli" in item.value for item in app.markdown)
+    assert any(
+        "Hasil penyisipan pesan ditampilkan pada gambar stego di atas."
+        in item.value
+        for item in app.markdown
+    )
     download = next(w for w in app.download_button if w.label == "Download Stego Image (PNG)")
     download.click().run()
     assert not app.exception
@@ -78,6 +85,15 @@ def test_download_and_unrelated_rerun_keep_same_embedded_payload():
     assert app.session_state["embed_result"]["image_bytes"] == payload
     with Image.open(io.BytesIO(payload)) as stego:
         assert extract_plaintext(stego.convert("RGB"), b"test-key") == "hello"
+
+
+def test_cover_upload_shows_preview_in_input():
+    app = new_app()
+    app.file_uploader(key="embed_cover").set_value(uploaded_cover())
+    app.run()
+
+    assert not app.exception
+    assert any("Cover · Citra asli" in item.value for item in app.markdown)
 
 
 def test_ui_reports_utf8_capacity_and_accepts_exact_boundary():
@@ -108,6 +124,7 @@ def test_extract_read_round_trip_and_result_survives_unrelated_rerun():
     button(app, "Extract & Decrypt").click().run()
     assert not app.exception
     assert any("<strong>Plaintext</strong>" in w.value and message in w.value for w in app.markdown)
+    assert any("Stego · Gambar yang diekstrak" in item.value for item in app.markdown)
     app.text_input(key="lab_key").set_value("different lab key").run()
     assert not app.exception
     assert any("<strong>Plaintext</strong>" in w.value and message in w.value for w in app.markdown)
@@ -128,6 +145,7 @@ def test_extract_wrong_key_then_correct_key_and_changed_file(image_format):
     assert not app.exception
     assert app.session_state["extract_result"]["plaintext"] is None
     assert app.session_state["extract_result"]["error"]
+    assert any("Stego · Gambar yang diekstrak" in item.value for item in app.markdown)
     app.text_input(key="extract_key").set_value("correct-key").run()
     assert "extract_result" not in app.session_state
     button(app, "Extract & Decrypt").click().run()
