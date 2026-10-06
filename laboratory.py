@@ -1,12 +1,9 @@
-"""Laboratory experiment runner for StegoChat V1.
-
-This module provides automated testing capabilities for evaluating
-the StegoChat system across multiple images and message sizes.
-"""
+"""Pengujian beberapa citra dan ukuran pesan dengan pencatatan status per tahap."""
 
 from __future__ import annotations
 
 import os
+import secrets
 from dataclasses import asdict, dataclass, replace
 
 import pandas as pd
@@ -21,7 +18,7 @@ from stegochat.core import embed_plaintext, extract_plaintext
 
 @dataclass(frozen=True)
 class ExperimentResult:
-    """Result of one laboratory experiment case."""
+    """Wadah satu kasus uji: kapasitas, kualitas citra, status proses, dan catatan error."""
 
     image_name: str
     width: int
@@ -44,18 +41,14 @@ def run_experiment_case(
     message: str,
     stego_key_bytes: bytes,
 ) -> ExperimentResult:
-    """Run a single experiment case.
+    """Uji satu cover dan pesan: kapasitas, embedding, ekstraksi, metrik, lalu JPEG.
 
-    Args:
-        cover_image: The cover RGB image.
-        message: The plaintext message to embed.
-        stego_key_bytes: The stego key as bytes.
-
-    Returns:
-        ExperimentResult with all metrics and outcomes.
+    Satu stego dipakai untuk semua tahap. Status dicatat secara terpisah agar
+    kegagalan tahap berikutnya tidak menghapus keberhasilan tahap sebelumnya.
     """
     width, height = cover_image.size
     capacity = capacity_bits(width, height)
+    # Kapasitas dihitung dari byte UTF-8; karakter non-ASCII dapat memakai beberapa byte.
     msg_bytes = len(message.encode("utf-8"))
     payload_bits = required_bits(msg_bytes + AUTH_TAG_LENGTH)
     result = ExperimentResult(
@@ -77,7 +70,7 @@ def run_experiment_case(
     if payload_bits > capacity:
         return replace(result, error="capacity_exceeded")
 
-    # Each stage records its own outcome. Later errors must not erase successes.
+    # Catat setiap tahap terpisah agar error berikutnya tidak menghapus sukses sebelumnya.
     try:
         stego_image = embed_plaintext(cover_image, message, stego_key_bytes)
     except Exception as error:
@@ -95,12 +88,14 @@ def run_experiment_case(
 
     try:
         mse = calculate_mse(cover_image, stego_image)
+        # Simpan MSE asli; pembulatan hanya diperlukan pada tampilan.
         result = replace(result, mse=mse)
         result = replace(result, psnr=psnr_from_mse(mse))
     except Exception as error:
         errors.append(_stage_error("metrics", error))
 
     try:
+        # Uji JPEG memakai stego yang sama dengan ekstraksi dan perhitungan metrik.
         jpeg_result = run_jpeg_attack(
             stego_image, message, stego_key_bytes
         )
@@ -124,7 +119,7 @@ def run_experiment_case(
 
 
 def _stage_error(stage: str, error: Exception) -> str:
-    """Include the stage and exception type, even for errors with empty text."""
+    """Gabungkan nama tahap, jenis exception, dan pesannya agar sumber gagal mudah ditelusuri."""
     return f"{stage}: {type(error).__name__}: {error}"
 
 
@@ -134,16 +129,10 @@ def run_laboratory(
     stego_key: str,
     output_xlsx: str | None = None,
 ) -> list[ExperimentResult]:
-    """Run laboratory experiments across multiple images and message sizes.
+    """Jalankan seluruh kombinasi berkas gambar dan ukuran pesan lalu kumpulkan hasil.
 
-    Args:
-        image_paths: List of paths to test images.
-        message_sizes: List of message sizes in bytes to test.
-        stego_key: The stego key (password) as a string.
-        output_xlsx: Optional path to save results as XLSX.
-
-    Returns:
-        List of ExperimentResult objects.
+    Pesan dibuat dari huruf X agar panjang karakter sama dengan byte UTF-8.
+    Jika output_xlsx diberikan, hasil sekaligus disimpan sebagai Excel.
     """
     stego_key_bytes = stego_key.encode("utf-8")
     results: list[ExperimentResult] = []
@@ -154,7 +143,7 @@ def run_laboratory(
             image_name = os.path.basename(image_path)
 
             for msg_size in message_sizes:
-                # Generate message of specified size
+                # Karakter ASCII X memakai satu byte, sehingga ukuran pesan tepat sesuai pilihan.
                 message = "X" * msg_size
 
                 result = run_experiment_case(cover_image, message, stego_key_bytes)
@@ -166,7 +155,7 @@ def run_laboratory(
         except Exception as e:
             print(f"Error processing {image_path}: {str(e)}")
 
-    # Export to XLSX if requested
+    # Simpan tabel Excel bila lokasi keluaran diberikan.
     if output_xlsx:
         export_results_to_xlsx(results, output_xlsx)
 
@@ -176,12 +165,7 @@ def run_laboratory(
 def export_results_to_xlsx(
     results: list[ExperimentResult], output_path: str
 ) -> None:
-    """Export experiment results to an XLSX file.
-
-    Args:
-        results: List of ExperimentResult objects.
-        output_path: Path to save the XLSX file.
-    """
+    """Ubah dataclass hasil menjadi tabel lalu simpan ke lembar Excel tanpa kolom indeks."""
     df = pd.DataFrame([asdict(result) for result in results])
     df.to_excel(output_path, index=False, sheet_name="Experiment Results")
 
@@ -196,14 +180,9 @@ def generate_test_dataset(
         (640, 427, "photo"),
     ),
 ) -> list[str]:
-    """Generate test images if they don't exist.
+    """Sediakan gambar uji; buat gradasi RGB hanya untuk berkas yang belum ada.
 
-    Args:
-        output_dir: Directory to save test images.
-        sizes: Tuple of (width, height, prefix) for each image.
-
-    Returns:
-        List of paths to generated images.
+    Gambar yang sudah tersedia dipakai kembali sehingga tidak ditimpa.
     """
     os.makedirs(output_dir, exist_ok=True)
     image_paths: list[str] = []
@@ -213,17 +192,17 @@ def generate_test_dataset(
         filepath = os.path.join(output_dir, filename)
 
         if not os.path.exists(filepath):
-            # Create a simple gradient image
+            # Buat gradasi sebagai gambar cadangan jika berkas belum tersedia.
             import numpy as np
 
             img_array = np.zeros((height, width, 3), dtype=np.uint8)
 
-            # Create a gradient pattern
+            # Koordinat menentukan gradasi merah dan hijau, sementara biru dibuat tetap.
             for y in range(height):
                 for x in range(width):
-                    img_array[y, x, 0] = (x * 255) // width  # Red gradient
-                    img_array[y, x, 1] = (y * 255) // height  # Green gradient
-                    img_array[y, x, 2] = 128  # Blue constant
+                    img_array[y, x, 0] = (x * 255) // width  # Gradasi merah horizontal
+                    img_array[y, x, 1] = (y * 255) // height  # Gradasi hijau vertikal
+                    img_array[y, x, 2] = 128  # Kanal biru tetap
 
             img = Image.fromarray(img_array, "RGB")
             img.save(filepath, "PNG")
@@ -235,24 +214,22 @@ def generate_test_dataset(
 
 def run_default_laboratory(
     output_xlsx: str = "results/laboratory_results.xlsx",
-    stego_key: str = "test-secret-key",
+    stego_key: str | None = None,
 ) -> list[ExperimentResult]:
-    """Run the default laboratory experiment with standard test images.
+    """Jalankan lima citra dengan tiga ukuran pesan lalu ekspor hasil tanpa menyimpan kunci.
 
-    Args:
-        output_xlsx: Path to save XLSX results.
-        stego_key: The stego key to use.
-
-    Returns:
-        List of ExperimentResult objects.
+    Jika kunci tidak diberikan, buat kunci acak yang hanya dipakai selama batch.
     """
-    # Generate or use existing test images
+    if stego_key is None:
+        stego_key = secrets.token_hex(32)
+
+    # Pakai citra yang tersedia atau buat gambar cadangan.
     image_paths = generate_test_dataset()
 
-    # Use 3 message sizes
+    # Tiga ukuran pesan pada lima citra menghasilkan 15 kombinasi uji.
     message_sizes = [10, 50, 100]
 
-    # Run experiments
+    # Jalankan semua kombinasi dan simpan hasil ke Excel.
     results = run_laboratory(
         image_paths=image_paths,
         message_sizes=message_sizes,

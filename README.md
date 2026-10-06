@@ -105,12 +105,13 @@ python -m pytest -q
 ## Contoh penggunaan pipeline inti
 
 ```python
+from getpass import getpass
 from PIL import Image
 
 from stegochat.core import embed_plaintext, extract_plaintext
 
 cover = Image.open("data/test_images/cover.png").convert("RGB")
-stego_key = b"shared-secret-string"
+stego_key = getpass("Masukkan stego-key: ").encode("utf-8")
 
 stego = embed_plaintext(cover, "hello from StegoChat", stego_key)
 stego.save("results/stego.png")  # format lossless wajib digunakan
@@ -121,6 +122,8 @@ recovered = extract_plaintext(
 )
 assert recovered == "hello from StegoChat"
 ```
+
+Kunci dimasukkan saat aplikasi dijalankan, bukan ditulis di kode atau disimpan dalam hasil ekspor. Runner bawaan membuat kunci acak sementara jika kunci tidak diberikan. Nilai dummy di unit test hanya merupakan data pengujian, bukan kredensial pengguna.
 
 Proses ekstraksi memiliki dua lapisan validasi:
 

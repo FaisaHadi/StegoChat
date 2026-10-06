@@ -1,11 +1,14 @@
-"""Tests for the StegoChat laboratory experiment runner."""
+"""Pengujian runner laboratorium, pembuatan dataset, dan ekspor Excel."""
 
 from __future__ import annotations
 
 import os
+import secrets
 import tempfile
 
 import pytest
+
+import laboratory
 
 from laboratory import (
     ExperimentResult,
@@ -17,7 +20,7 @@ from laboratory import (
 
 
 def test_experiment_result_dataclass() -> None:
-    """Test ExperimentResult dataclass structure."""
+    """Pastikan seluruh field hasil eksperimen menyimpan nilai yang diberikan."""
     result = ExperimentResult(
         image_name="test.png",
         width=100,
@@ -52,10 +55,10 @@ def test_experiment_result_dataclass() -> None:
 
 
 def test_run_experiment_case_success() -> None:
-    """Test successful experiment case."""
+    """Pastikan satu kasus uji mencatat embedding, ekstraksi, metrik, dan hasil JPEG."""
     from PIL import Image
 
-    # Create a simple test image
+    # Pakai cover sederhana untuk menguji alur tanpa bergantung pada berkas luar.
     cover = Image.new("RGB", (100, 100), color=(100, 101, 102))
     message = "Test message"
     stego_key = b"test-key"
@@ -74,12 +77,12 @@ def test_run_experiment_case_success() -> None:
 
 
 def test_run_experiment_case_capacity_exceeded() -> None:
-    """Test experiment case with message too large for image."""
+    """Pastikan pesan melebihi kapasitas dicatat sebagai gagal tanpa metrik."""
     from PIL import Image
 
-    # Create a small image
+    # Gunakan gambar kecil agar batas kapasitas mudah dilampaui.
     cover = Image.new("RGB", (10, 10), color=(100, 101, 102))
-    # Message too large for 10x10 image
+    # Pesan ini sengaja melebihi kapasitas gambar 10x10.
     message = "X" * 1000
     stego_key = b"test-key"
 
@@ -93,11 +96,11 @@ def test_run_experiment_case_capacity_exceeded() -> None:
 
 
 def test_run_laboratory() -> None:
-    """Test laboratory experiment runner."""
-    # Generate test images
+    """Pastikan runner menghasilkan satu hasil untuk setiap kombinasi gambar dan pesan."""
+    # Siapkan citra uji di folder sementara.
     image_paths = generate_test_dataset()
 
-    # Use 2 message sizes for faster test
+    # Dua ukuran pesan cukup untuk menguji kombinasi runner dengan cepat.
     message_sizes = [10, 50]
     stego_key = "test-key"
 
@@ -107,7 +110,7 @@ def test_run_laboratory() -> None:
         stego_key=stego_key,
     )
 
-    assert len(results) == 4  # 2 images x 2 message sizes
+    assert len(results) == 4  # Dua citra dikalikan dua ukuran pesan menghasilkan empat kasus.
 
     for result in results:
         assert isinstance(result, ExperimentResult)
@@ -117,7 +120,7 @@ def test_run_laboratory() -> None:
 
 
 def test_export_results_to_xlsx() -> None:
-    """Test XLSX export functionality."""
+    """Pastikan hasil dapat diekspor dan dibaca kembali sebagai tabel Excel."""
     results = [
         ExperimentResult(
             image_name="test1.png",
@@ -161,7 +164,7 @@ def test_export_results_to_xlsx() -> None:
     try:
         export_results_to_xlsx(results, output_path)
 
-        # Verify file was created
+        # Pastikan berkas Excel benar-benar terbentuk.
         assert os.path.exists(output_path)
         assert os.path.getsize(output_path) > 0
 
@@ -171,7 +174,7 @@ def test_export_results_to_xlsx() -> None:
 
 
 def test_generate_test_dataset() -> None:
-    """Test test image generation."""
+    """Pastikan dataset yang dibuat tersedia dan dapat dibuka sebagai gambar RGB."""
     with tempfile.TemporaryDirectory() as tmpdir:
         image_paths = generate_test_dataset(output_dir=tmpdir)
 
@@ -181,7 +184,7 @@ def test_generate_test_dataset() -> None:
             assert os.path.exists(path)
             assert path.endswith(".png")
 
-            # Verify image can be opened
+            # Pastikan setiap berkas dataset dapat dibuka sebagai gambar.
             from PIL import Image
 
             with Image.open(path) as img:
@@ -189,7 +192,7 @@ def test_generate_test_dataset() -> None:
 
 
 def test_laboratory_with_nonexistent_image() -> None:
-    """Test laboratory runner with nonexistent image."""
+    """Pastikan berkas gambar yang tidak ditemukan ditangani tanpa menghentikan runner."""
     image_paths = ["nonexistent.png"]
     message_sizes = [10]
     stego_key = "test-key"
@@ -200,5 +203,36 @@ def test_laboratory_with_nonexistent_image() -> None:
         stego_key=stego_key,
     )
 
-    # Should return empty list or handle gracefully
+    # Berkas yang hilang harus ditangani tanpa menghasilkan kasus uji palsu.
     assert len(results) == 0
+
+
+def test_default_laboratory_generates_temporary_keys(monkeypatch):
+    """Pastikan setiap batch tanpa kunci memakai kunci acak, bukan nilai bawaan tetap."""
+    captured = []
+    monkeypatch.setattr(laboratory, "generate_test_dataset", lambda: [])
+
+    def capture_batch(**kwargs):
+        captured.append(kwargs["stego_key"])
+        return []
+
+    monkeypatch.setattr(laboratory, "run_laboratory", capture_batch)
+    laboratory.run_default_laboratory()
+    laboratory.run_default_laboratory()
+    assert all(len(key) == 64 for key in captured)
+    assert captured[0] != captured[1]
+
+
+def test_default_laboratory_preserves_provided_key(monkeypatch):
+    """Pastikan kunci masukan tetap dipakai dan tidak diganti dengan kunci otomatis."""
+    provided_key = secrets.token_hex(32)
+    captured = []
+    monkeypatch.setattr(laboratory, "generate_test_dataset", lambda: [])
+
+    def capture_batch(**kwargs):
+        captured.append(kwargs["stego_key"])
+        return []
+
+    monkeypatch.setattr(laboratory, "run_laboratory", capture_batch)
+    laboratory.run_default_laboratory(stego_key=provided_key)
+    assert captured == [provided_key]
