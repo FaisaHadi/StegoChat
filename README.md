@@ -61,7 +61,10 @@ analysis/             Metrik kualitas gambar dan alat steganalisis
   jpeg_fragility.py     Pengujian fragilitas rekompresi JPEG
   image_utils.py        Utilitas pemrosesan gambar bersama
 laboratory.py         Runner eksperimen laboratorium dan ekspor XLSX
-app.py                Aplikasi web Streamlit
+ui/                   Komponen antarmuka Streamlit
+  messaging.py         Tab Embed & Send dan Extract & Read
+  laboratory.py        Tab Laboratory & Security Testing
+app.py                Shell, halaman awal, navigasi, dan gaya aplikasi
 tests/                Unit test dan integration test untuk semua modul
 data/                 Aset sampel untuk pengujian dan demonstrasi
 docs/                 Dokumen desain sistem dan perencanaan
@@ -152,6 +155,7 @@ Proses ekstraksi memiliki dua lapisan validasi:
 
 ### Pengujian Keamanan
 
+- Uji Chi-square Pairs-of-Values untuk mendeteksi indikasi steganografi (`analysis/chi_square.py`).
 - Pengujian fragilitas rekompresi JPEG (`analysis/jpeg_fragility.py`).
 - Runner eksperimen laboratorium otomatis (`laboratory.py`).
 - Ekspor XLSX untuk hasil eksperimen (`laboratory.py`).
@@ -161,13 +165,13 @@ Proses ekstraksi memiliki dua lapisan validasi:
 - Aplikasi web Streamlit dengan 3 tab (`app.py`):
   - **Tab 1 - Embed & Send**: Upload cover image, masukkan pesan, embed dan unduh stego image.
   - **Tab 2 - Extract & Read**: Upload stego image, masukkan kunci, ekstrak dan dekripsi pesan.
-  - **Tab 3 - Laboratory & Security Testing**: Analisis histogram, visualisasi bit-plane LSB, pengujian serangan JPEG, dan runner eksperimen.
+  - **Tab 3 - Laboratory & Security Testing**: Analisis histogram, visualisasi bit-plane LSB, uji Chi-square, pengujian serangan JPEG, dan runner eksperimen.
 
 ### Pengujian Otomatis
 
 - Unit test dan integration test untuk pipeline inti (`tests/`).
 - Test eksperimen laboratorium (`tests/test_laboratory.py`).
-- Total 71 test berhasil.
+- Total 111 test berhasil.
 
 ## Hasil Pengujian
 
@@ -177,7 +181,7 @@ Jalankan test suite:
 python -m pytest -q
 ```
 
-Hasil saat ini: **71 tests passing**
+Hasil saat ini: **111 tests passing**
 
 ## Artefak yang Dihasilkan
 
@@ -247,7 +251,7 @@ Aplikasi akan terbuka di browser secara otomatis. Terdapat tiga fitur utama:
 
 - **Embed & Send** — upload gambar cover, masukkan pesan dan kunci, lalu unduh stego image yang sudah disisipi pesan terenkripsi.
 - **Extract & Read** — upload stego image dan masukkan kunci yang sama untuk mengekstrak dan mendekripsi pesan.
-- **Laboratory & Security Testing** — analisis histogram RGB, visualisasi bit-plane LSB, pengujian serangan JPEG, dan runner eksperimen otomatis.
+- **Laboratory & Security Testing** — analisis histogram RGB, visualisasi bit-plane LSB, uji Chi-square, pengujian serangan JPEG, dan runner eksperimen otomatis.
 
 ### Menjalankan pengujian
 
@@ -266,7 +270,7 @@ Berikut penjelasan singkat folder-folder utama dalam repository:
 - `crypto/` — modul kriptografi: derivasi kunci (PBKDF2) dan enkripsi/dekripsi AES-256-GCM.
 - `stego/` — modul steganografi: format payload V1, pemilihan posisi PRNG, perhitungan kapasitas, dan embedding/ekstraksi LSB.
 - `stegochat/` — orkestrasi end-to-end yang menghubungkan kriptografi dan steganografi melalui `core.py`.
-- `analysis/` — alat analisis: metrik kualitas gambar (MSE, PSNR), histogram RGB, visualisasi bit-plane, dan pengujian fragilitas JPEG.
+- `analysis/` — alat analisis: metrik kualitas gambar (MSE, PSNR), histogram RGB, visualisasi bit-plane, uji Chi-square, dan pengujian fragilitas JPEG.
 - `tests/` — unit test dan integration test untuk semua modul.
 - `data/` — aset sampel (gambar dan data uji) untuk keperluan pengujian dan demonstrasi.
 
@@ -358,16 +362,17 @@ Berikut adalah capaian yang sudah benar-benar ada dan berfungsi di repository:
 - Perhitungan MSE dan PSNR.
 - Komputasi dan perbandingan histogram RGB.
 - Ekstraksi dan visualisasi bit-plane LSB.
+- Uji Chi-square Pairs-of-Values untuk mendeteksi indikasi steganografi.
 - Pengujian fragilitas rekompresi JPEG.
 - Runner eksperimen otomatis dengan ekspor ke XLSX.
 
 **Automated Testing**
-- 71 test berhasil dijalankan.
+- 111 test berhasil dijalankan.
 
 ## Fitur yang direncanakan (belum ada di kode saat ini)
 
 Fitur-fitur ini dijelaskan dalam desain sistem tetapi belum ada dalam implementasi saat ini:
 
-- Teknik steganalisis tambahan di luar JPEG fragility.
+- Teknik steganalisis tambahan di luar Chi-square Pairs-of-Values.
 - Metrik kualitas gambar lanjutan di luar MSE/PSNR.
 - Metrik kemiripan perseptual (SSIM, dll.).
