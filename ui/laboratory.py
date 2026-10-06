@@ -738,14 +738,14 @@ def tab_laboratory() -> None:
                     axes[1, i].set_ylabel("Count", fontsize=9)
                     axes[1, i].tick_params(axis="both", labelsize=8)
 
-                st.pyplot(fig)
-                # Tutup figure setelah tampil agar rerun tidak menumpuk objek Matplotlib.
-                plt.close(fig)
-
-                st.info(
-                    f"**Total changed bins:** "
-                    f"{comparison.changed_bin_count()} of 768"
-                )
+                with st.container(key="lab-histogram-responsive"):
+                    st.pyplot(fig, width="stretch")
+                    # Tutup figure setelah tampil agar rerun tidak menumpuk objek Matplotlib.
+                    plt.close(fig)
+                    st.info(
+                        f"**Total changed bins:** "
+                        f"{comparison.changed_bin_count()} of 768"
+                    )
 
             except Exception as e:
                 st.error(f"Error: {str(e)}")
@@ -785,81 +785,82 @@ def tab_laboratory() -> None:
                     stego_image,
                 )
 
-                st.subheader("Cover LSB Planes")
+                with st.container(key="lab-lsb-responsive"):
+                    st.subheader("Cover LSB Planes")
 
-                col1, col2, col3 = st.columns(3)
+                    col1, col2, col3 = st.columns(3)
 
-                for i, (channel, name) in enumerate(
-                    [
-                        (0, "Red"),
-                        (1, "Green"),
-                        (2, "Blue"),
-                    ]
-                ):
-                    with (
-                        col1
-                        if i == 0
-                        else col2
-                        if i == 1
-                        else col3
+                    for i, (channel, name) in enumerate(
+                        [
+                            (0, "Red"),
+                            (1, "Green"),
+                            (2, "Blue"),
+                        ]
                     ):
-                        st.image(
-                            plane_to_image(
-                                comparison.cover.for_channel(
-                                    "RGB"[i]
-                                )
-                            ),
-                            caption=f"{name} Channel",
-                            width="stretch",
-                        )
+                        with (
+                            col1
+                            if i == 0
+                            else col2
+                            if i == 1
+                            else col3
+                        ):
+                            st.image(
+                                plane_to_image(
+                                    comparison.cover.for_channel(
+                                        "RGB"[i]
+                                    )
+                                ),
+                                caption=f"{name} Channel",
+                                width="stretch",
+                            )
 
-                st.subheader("Stego LSB Planes")
+                    st.subheader("Stego LSB Planes")
 
-                col1, col2, col3 = st.columns(3)
+                    col1, col2, col3 = st.columns(3)
 
-                for i, (channel, name) in enumerate(
-                    [
-                        (0, "Red"),
-                        (1, "Green"),
-                        (2, "Blue"),
-                    ]
-                ):
-                    with (
-                        col1
-                        if i == 0
-                        else col2
-                        if i == 1
-                        else col3
+                    for i, (channel, name) in enumerate(
+                        [
+                            (0, "Red"),
+                            (1, "Green"),
+                            (2, "Blue"),
+                        ]
                     ):
-                        st.image(
-                            plane_to_image(
-                                comparison.stego.for_channel(
-                                    "RGB"[i]
-                                )
-                            ),
-                            caption=f"{name} Channel",
-                            width="stretch",
-                        )
+                        with (
+                            col1
+                            if i == 0
+                            else col2
+                            if i == 1
+                            else col3
+                        ):
+                            st.image(
+                                plane_to_image(
+                                    comparison.stego.for_channel(
+                                        "RGB"[i]
+                                    )
+                                ),
+                                caption=f"{name} Channel",
+                                width="stretch",
+                            )
 
-                st.subheader("Changed LSB Pixels")
+                    st.subheader("Changed LSB Pixels")
 
-                st.image(
-                    plane_to_image(
-                        comparison.channel_change_mask
-                    ),
-                    caption=(
-                        "Pixels with LSB modifications "
-                        "(white = changed)"
-                    ),
-                    width="stretch",
-                )
+                    st.image(
+                        plane_to_image(
+                            comparison.channel_change_mask
+                        ),
+                        caption=(
+                            "Pixels with LSB modifications "
+                            "(white = changed)"
+                        ),
+                        width="stretch",
+                    )
 
-                st.info(
-                    f"**Changed pixels:** "
-                    f"{comparison.changed_pixel_count()} | "
-                    f"**Changed channels:** "
-                    f"{comparison.changed_channel_count}"
-                )
+                    st.info(
+                        f"**Changed pixels:** "
+                        f"{comparison.changed_pixel_count()} | "
+                        f"**Changed channels:** "
+                        f"{comparison.changed_channel_count}"
+                    )
 
             except Exception as e:
                 st.error(f"Error: {str(e)}")

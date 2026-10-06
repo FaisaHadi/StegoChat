@@ -48,6 +48,15 @@ st.markdown(
         width: 100%;
     }
 
+    /* Keep analysis visuals readable on wide screens and fluid on narrow ones. */
+    div.st-key-lab-histogram-responsive,
+    div.st-key-lab-lsb-responsive {
+        width: 100%;
+        max-width: 1100px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
     /* ============ BACKGROUND: grid blueprint halus + glow blob ============ */
     .stApp {
         background:
