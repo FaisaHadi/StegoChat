@@ -1,4 +1,4 @@
-"""Deterministic RGB-channel position selection for StegoChat V1."""
+"""Pemilihan posisi LSB unik yang dapat diulang dengan kunci dan salt yang sama."""
 
 from __future__ import annotations
 
@@ -21,13 +21,17 @@ _COUNTER_MAX = (1 << 64) - 1
 
 
 def header_seed(stego_key_bytes: bytes) -> bytes:
-    """Return the V1 HMAC-SHA256 seed used for header positions."""
+    """Bentuk seed header dengan HMAC-SHA256 dari kunci dan konteks khusus header."""
     _require_bytes("stego_key_bytes", stego_key_bytes)
     return hmac.new(stego_key_bytes, _HEADER_CONTEXT, hashlib.sha256).digest()
 
 
 def body_seed(stego_key_bytes: bytes, salt: bytes) -> bytes:
-    """Return the V1 HMAC-SHA256 seed used for body positions."""
+    """Bentuk seed body dari kunci, konteks body, dan salt 16 byte.
+
+    Salt membuat posisi isi dapat berbeda pada penyisipan baru dengan password
+    yang sama, sementara konteks memisahkan seed header dari seed body.
+    """
     _require_bytes("stego_key_bytes", stego_key_bytes)
     _require_bytes("salt", salt)
     if len(salt) != SALT_LENGTH:
@@ -38,7 +42,7 @@ def body_seed(stego_key_bytes: bytes, salt: bytes) -> bytes:
 def select_header_positions(
     stego_key_bytes: bytes, width: int, height: int
 ) -> list[Position]:
-    """Select the fixed 272 unique V1 header positions."""
+    """Pilih 272 posisi kanal unik untuk menyimpan header tetap 34 byte."""
     return select_positions(
         header_seed(stego_key_bytes), width, height, HEADER_POSITION_COUNT
     )
@@ -52,7 +56,7 @@ def select_body_positions(
     requested_count: int,
     reserved_header_positions: Iterable[Position],
 ) -> list[Position]:
-    """Select body positions while excluding every reserved header position."""
+    """Pilih posisi isi dari kunci dan salt sambil mengecualikan seluruh posisi header."""
     return select_positions(
         body_seed(stego_key_bytes, salt),
         width,
@@ -69,11 +73,11 @@ def select_positions(
     count: int,
     excluded_positions: Iterable[Position] = (),
 ) -> list[Position]:
-    """Deterministically select unique RGB-channel positions.
+    """Pilih posisi kanal RGB tanpa pengulangan menggunakan shuffle Fisher-Yates parsial.
 
-    Positions use row-major RGB-channel indexing: index zero is ``(0, 0, 0)``,
-    followed by ``(0, 0, 1)`` and ``(0, 0, 2)``. The position stream is based
-    on HMAC-SHA256 counter blocks and does not use Python's built-in ``hash()``.
+    Aliran angka berasal dari HMAC-SHA256, sehingga seed yang sama memberi
+    urutan yang sama lintas proses Python. Hanya posisi yang dibutuhkan
+    dibentuk, tanpa membuat daftar lengkap semua kanal gambar.
     """
     _require_bytes("seed", seed)
     _validate_dimension("width", width)
@@ -90,7 +94,7 @@ def select_positions(
     swaps: dict[int, int] = {}
     selected: list[Position] = []
 
-    # This is a partial Fisher-Yates shuffle over unreserved ordinal positions.
+    # Pilih posisi tanpa pengulangan lewat shuffle parsial pada posisi yang tersedia.
     for drawn_count in range(count):
         remaining_count = available_count - drawn_count
         chosen_ordinal = rng.randbelow(remaining_count)
@@ -107,17 +111,24 @@ def select_positions(
 
 
 class _HmacCounterRng:
-    """A process-stable, deterministic random-number stream from HMAC blocks."""
+    """Pembuat angka acak semu deterministik dari HMAC-SHA256 dengan counter bertambah."""
 
     def __init__(self, seed: bytes) -> None:
+        """Simpan seed dan mulai counter dari nol untuk membentuk aliran angka yang dapat diulang."""
         self._seed = seed
         self._counter = 0
 
     def randbelow(self, upper_bound: int) -> int:
+        """Ambil angka dari nol sampai batas eksklusif dengan rejection sampling.
+
+        Kandidat di luar kelipatan rentang yang merata ditolak agar operasi modulo
+        tidak memberi peluang lebih besar pada angka tertentu.
+        """
         if upper_bound <= 0:
             raise ValueError("upper_bound must be greater than zero")
 
         modulus = 1 << _HMAC_BLOCK_BITS
+        # Batasi kandidat ke kelipatan rentang agar semua keluaran sama peluangnya.
         acceptance_limit = modulus - (modulus % upper_bound)
         while True:
             candidate = int.from_bytes(self._next_block(), byteorder="big")
@@ -125,6 +136,7 @@ class _HmacCounterRng:
                 return candidate % upper_bound
 
     def _next_block(self) -> bytes:
+        """Hasilkan satu blok HMAC dari konteks dan counter, lalu majukan counter."""
         if self._counter > _COUNTER_MAX:
             raise RuntimeError("deterministic position stream is exhausted")
         counter_bytes = self._counter.to_bytes(8, byteorder="big")
@@ -137,6 +149,7 @@ class _HmacCounterRng:
 def _reserved_indices(
     positions: Iterable[Position], width: int, height: int
 ) -> list[int]:
+    """Validasi posisi yang dicadangkan, ubah menjadi indeks datar unik, lalu urutkan."""
     indices = {
         _position_to_index(position, width, height)
         for position in positions
@@ -147,13 +160,18 @@ def _reserved_indices(
 def _allowed_index_at(
     ordinal: int, total_positions: int, reserved_indices: list[int]
 ) -> int:
-    """Map an ordinal among unreserved positions to its flat RGB index."""
+    """Cari indeks kanal dari urutan posisi yang tidak dicadangkan.
+
+    Pencarian biner menghitung berapa posisi tersedia hingga titik tengah
+    dengan bisect_right, sehingga lokasi header dapat dilewati.
+    """
     target_rank = ordinal + 1
     low = 0
     high = total_positions - 1
 
     while low < high:
         midpoint = (low + high) // 2
+        # Kurangi posisi header dari jumlah indeks hingga titik tengah pencarian.
         allowed_through_midpoint = midpoint + 1 - bisect_right(reserved_indices, midpoint)
         if allowed_through_midpoint >= target_rank:
             high = midpoint
@@ -164,12 +182,14 @@ def _allowed_index_at(
 
 
 def _index_to_position(flat_index: int, width: int) -> Position:
+    """Ubah indeks datar RGB menjadi koordinat x, y, dan nomor kanal."""
     pixel_index, channel = divmod(flat_index, RGB_CHANNELS)
     y, x = divmod(pixel_index, width)
     return x, y, channel
 
 
 def _position_to_index(position: Position, width: int, height: int) -> int:
+    """Validasi koordinat dan ubah x, y, kanal menjadi indeks datar RGB."""
     if not isinstance(position, tuple) or len(position) != 3:
         raise TypeError("each position must be a tuple of (x, y, channel)")
 
@@ -187,6 +207,7 @@ def _position_to_index(position: Position, width: int, height: int) -> int:
 
 
 def _validate_dimension(name: str, value: int) -> None:
+    """Pastikan lebar dan tinggi berupa bilangan bulat positif, bukan boolean."""
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"{name} must be an integer")
     if value <= 0:
@@ -194,6 +215,7 @@ def _validate_dimension(name: str, value: int) -> None:
 
 
 def _validate_count(count: int) -> None:
+    """Pastikan jumlah posisi berupa bilangan bulat tidak negatif."""
     if isinstance(count, bool) or not isinstance(count, int):
         raise TypeError("count must be an integer")
     if count < 0:
@@ -201,5 +223,6 @@ def _validate_count(count: int) -> None:
 
 
 def _require_bytes(name: str, value: bytes) -> None:
+    """Pastikan kunci, seed, atau salt berupa bytes sebelum dipakai oleh HMAC."""
     if not isinstance(value, bytes):
         raise TypeError(f"{name} must be bytes")

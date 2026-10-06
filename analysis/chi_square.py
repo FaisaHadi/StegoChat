@@ -1,4 +1,4 @@
-"""Chi-square (Pairs-of-Values) steganalysis for StegoChat V1."""
+"""Steganalisis Pairs-of-Values pada satu gambar melalui statistik Chi-Square per kanal."""
 
 from __future__ import annotations
 
@@ -11,14 +11,14 @@ from scipy import stats
 from analysis.image_utils import require_rgb_image, to_rgb_array
 
 CHANNEL_NAMES: tuple[str, str, str] = ("R", "G", "B")
-PAIR_COUNT = 128  # 256 intensities grouped into (2i, 2i+1) pairs
+PAIR_COUNT = 128  # 256 intensitas dikelompokkan menjadi pasangan (2i, 2i+1).
 DEFAULT_SUSPICION_THRESHOLD = 0.5
 P_VALUE_DISPLAY_THRESHOLD = 1e-6
 
 
 @dataclass(frozen=True)
 class ChiSquareChannelResult:
-    """Chi-square Pairs-of-Values result for a single RGB channel."""
+    """Wadah statistik Chi-Square, derajat kebebasan, dan p-value satu kanal."""
 
     channel: str
     chi_square_statistic: float
@@ -28,25 +28,25 @@ class ChiSquareChannelResult:
     def likely_contains_hidden_data(
         self, threshold: float = DEFAULT_SUSPICION_THRESHOLD
     ) -> bool:
-        """Return True when the p-value exceeds ``threshold``.
+        """Tandai kanal sebagai mencurigakan ketika p-value melewati ambang.
 
-        A high p-value means the observed Pairs-of-Values distribution is
-        suspiciously close to what LSB embedding would produce (values
-        within each pair are nearly equal in frequency).
+        Nilai tinggi menunjukkan frekuensi pasangan genap-ganjil mendekati sama,
+        sesuai pola yang dapat muncul pada LSB replacement. Ini indikasi
+        statistik, bukan bukti pasti keberadaan atau ketiadaan pesan.
         """
         return self.p_value > threshold
 
 
 @dataclass(frozen=True)
 class ChiSquareReport:
-    """Chi-square Pairs-of-Values results for all three RGB channels."""
+    """Wadah hasil uji terpisah untuk kanal merah, hijau, dan biru."""
 
     red: ChiSquareChannelResult
     green: ChiSquareChannelResult
     blue: ChiSquareChannelResult
 
     def for_channel(self, name: str) -> ChiSquareChannelResult:
-        """Return the chi-square result for channel ``"R"``, ``"G"``, or ``"B"``."""
+        """Ambil hasil Chi-Square kanal R, G, atau B; tolak nama kanal lain."""
         if name == "R":
             return self.red
         if name == "G":
@@ -58,7 +58,7 @@ class ChiSquareReport:
     def suspected_channel_count(
         self, threshold: float = DEFAULT_SUSPICION_THRESHOLD
     ) -> int:
-        """Return how many of the three channels look embedded at ``threshold``."""
+        """Hitung kanal dengan p-value di atas ambang untuk membantu interpretasi aplikasi."""
         return sum(
             1
             for name in CHANNEL_NAMES
@@ -67,12 +67,10 @@ class ChiSquareReport:
 
 
 def compute_chi_square_test(image: Image.Image) -> ChiSquareReport:
-    """Run the Pairs-of-Values chi-square steganalysis test on an RGB image.
+    """Uji keseimbangan pasangan intensitas genap-ganjil pada tiap kanal RGB.
 
-    Unlike histogram/bit-plane comparison, this test does not require the
-    original cover image — it is designed to flag a *suspected* stego image
-    on its own, which is what makes it a genuine steganalysis technique
-    rather than a before/after comparison.
+    Hanya satu citra diperlukan, sehingga pengujian dapat dilakukan tanpa
+    cover asli. Hasil yang tidak mencurigakan tetap tidak menjamin bebas pesan.
     """
     require_rgb_image(image, "image")
     array = to_rgb_array(image)
@@ -86,7 +84,7 @@ def compute_chi_square_test(image: Image.Image) -> ChiSquareReport:
 def chi_square_report_to_rows(
     report: ChiSquareReport,
 ) -> list[dict[str, float | str | int | bool]]:
-    """Flatten a chi-square report into rows usable by an XLSX sheet or DataFrame."""
+    """Susun hasil tiap kanal menjadi baris tabel; pertahankan p-value asli untuk analisis."""
     return [
         {
             "channel": name,
@@ -101,7 +99,7 @@ def chi_square_report_to_rows(
 
 
 def format_p_value_for_display(p_value: float) -> str:
-    """Format a p-value for a human-readable table without implying zero."""
+    """Tampilkan p-value sangat kecil sebagai batas atas, agar tidak tampak sebagai nol mutlak."""
     if p_value < P_VALUE_DISPLAY_THRESHOLD:
         return "< 0,000001"
     return f"{p_value:.6g}".replace(".", ",")
@@ -110,6 +108,12 @@ def format_p_value_for_display(p_value: float) -> str:
 def _channel_chi_square(
     array: np.ndarray, channel: int, name: str
 ) -> ChiSquareChannelResult:
+    """Hitung Chi-Square dari 128 pasangan (0,1), (2,3), sampai (254,255).
+
+    Harapan tiap anggota pasangan adalah setengah total frekuensinya.
+    Pasangan kosong dilewati; p-value dihitung dengan survival function
+    distribusi Chi-Square sesuai derajat kebebasan yang dipakai proyek.
+    """
     counts = np.bincount(array[:, :, channel].ravel(), minlength=256)[:256].astype(
         np.float64
     )
@@ -119,6 +123,7 @@ def _channel_chi_square(
     for pair_index in range(PAIR_COUNT):
         even_count = counts[2 * pair_index]
         odd_count = counts[2 * pair_index + 1]
+        # Uji membandingkan frekuensi genap dengan harapan pasangan yang seimbang.
         expected = (even_count + odd_count) / 2.0
         if expected == 0:
             continue
@@ -126,6 +131,7 @@ def _channel_chi_square(
         degrees_of_freedom += 1
 
     degrees_of_freedom = max(degrees_of_freedom - 1, 1)
+    # Survival function menghitung ekor kanan langsung, tanpa pengurangan 1 - CDF.
     p_value = float(stats.chi2.sf(chi_square_sum, degrees_of_freedom))
 
     return ChiSquareChannelResult(

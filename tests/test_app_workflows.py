@@ -1,4 +1,4 @@
-"""Exercise the actual Streamlit widgets and persisted experiment results."""
+"""Pengujian widget Streamlit, perubahan input, dan ketahanan hasil selama rerun."""
 
 import io
 from pathlib import Path
@@ -16,12 +16,14 @@ APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
 
 
 def uploaded_cover(size=(64, 64), color=(100, 101, 102)):
+    """Buat bytes PNG beserta nama dan MIME untuk menyimulasikan unggahan cover."""
     buffer = io.BytesIO()
     Image.new("RGB", size, color).save(buffer, format="PNG")
     return ("cover.png", buffer.getvalue(), "image/png")
 
 
 def new_app():
+    """Buka aplikasi dalam AppTest langsung di halaman utama dan pastikan tidak ada exception."""
     app = AppTest.from_file(str(APP_PATH), default_timeout=20)
     app.session_state["started"] = True
     app.run()
@@ -30,10 +32,12 @@ def new_app():
 
 
 def button(app, label):
+    """Cari widget tombol dari label agar pengujian menekan kontrol yang tepat."""
     return next(widget for widget in app.button if widget.label == label)
 
 
 def ready_to_embed(app, cover=None, message="hello"):
+    """Isi cover, pesan, dan kunci pada widget lalu jalankan ulang sebelum pengujian embedding."""
     app.file_uploader(key="embed_cover").set_value(cover or uploaded_cover())
     app.text_area(key="embed_message").set_value(message)
     app.text_input(key="embed_key").set_value("test-key")
@@ -43,6 +47,7 @@ def ready_to_embed(app, cover=None, message="hello"):
 
 @pytest.mark.parametrize("changed", ["message", "key", "cover", "remove_cover"])
 def test_changed_embed_input_clears_result_and_download(changed):
+    """Pastikan perubahan input menghapus hasil embed dan unduhan lama."""
     app = new_app()
     ready_to_embed(app)
     button(app, "Embed Message").click().run()
@@ -64,6 +69,7 @@ def test_changed_embed_input_clears_result_and_download(changed):
 
 
 def test_download_and_unrelated_rerun_keep_same_embedded_payload():
+    """Pastikan unduhan dan rerun biasa mempertahankan bytes stego yang sama."""
     app = new_app()
     cover = uploaded_cover()
     ready_to_embed(app, cover=cover)
@@ -88,6 +94,7 @@ def test_download_and_unrelated_rerun_keep_same_embedded_payload():
 
 
 def test_cover_upload_shows_preview_in_input():
+    """Pastikan unggahan cover memunculkan pratinjau pada bagian input."""
     app = new_app()
     app.file_uploader(key="embed_cover").set_value(uploaded_cover())
     app.run()
@@ -97,8 +104,9 @@ def test_cover_upload_shows_preview_in_input():
 
 
 def test_ui_reports_utf8_capacity_and_accepts_exact_boundary():
+    """Pastikan UI memakai ukuran byte UTF-8 dan menerima pesan tepat pada batas kapasitas."""
     app = new_app()
-    # 408 bits = 51 bytes: header + tag reserve 50 bytes, leaving one byte.
+    # 408 bit = 51 byte: header dan tag memakai 50 byte, menyisakan satu byte pesan.
     ready_to_embed(app, uploaded_cover((8, 17)), message="é")
     assert any("Maximum message size: 1 UTF-8 bytes" in e.value for e in app.error)
     assert not any(w.label == "Embed Message" for w in app.button)
@@ -110,6 +118,7 @@ def test_ui_reports_utf8_capacity_and_accepts_exact_boundary():
 
 
 def test_extract_read_round_trip_and_result_survives_unrelated_rerun():
+    """Pastikan pesan pulih melalui UI dan hasilnya tetap tampil setelah rerun biasa."""
     app = new_app()
     message = "Pesan rahasia kelompok 11"
     ready_to_embed(app, message=message)
@@ -132,6 +141,7 @@ def test_extract_read_round_trip_and_result_survives_unrelated_rerun():
 
 @pytest.mark.parametrize("image_format", ["PNG", "BMP"])
 def test_extract_wrong_key_then_correct_key_and_changed_file(image_format):
+    """Pastikan kunci salah gagal, kunci benar memulihkan pesan, dan perubahan berkas menghapus hasil."""
     stego = embed_plaintext(Image.new("RGB", (64, 64)), "pesan uji", b"correct-key")
     buffer = io.BytesIO()
     stego.save(buffer, format=image_format)
@@ -160,6 +170,7 @@ def test_extract_wrong_key_then_correct_key_and_changed_file(image_format):
 
 
 def test_extract_rejects_corrupt_file_without_calling_it_wrong_password():
+    """Pastikan berkas rusak diberi pesan error gambar, bukan kesimpulan password salah."""
     app = new_app()
     app.file_uploader(key="extract_image").set_value(("broken.png", b"broken", "image/png"))
     app.text_input(key="extract_key").set_value("correct-key")
@@ -170,6 +181,7 @@ def test_extract_rejects_corrupt_file_without_calling_it_wrong_password():
 
 
 def test_runner_keeps_small_metrics_and_success_when_jpeg_raises(monkeypatch):
+    """Pastikan UI runner mempertahankan presisi metrik dan status sukses saat JPEG error."""
     cover = Image.new("RGB", (128, 128), (100, 101, 102))
     stego = cover.copy()
     stego.putpixel((0, 0), (101, 101, 102))

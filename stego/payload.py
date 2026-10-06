@@ -1,7 +1,8 @@
-"""Binary payload construction and validation for StegoChat V1."""
+"""Format data sisipan: header 34 byte, ciphertext, lalu tag autentikasi 16 byte."""
 
 from __future__ import annotations
 
+# Ukuran field adalah bagian protokol; pengirim dan penerima harus memakai format sama.
 MAGIC = b"SG"
 MAGIC_LENGTH = 2
 LENGTH_FIELD_LENGTH = 4
@@ -14,10 +15,10 @@ MAX_BODY_LENGTH = (1 << (LENGTH_FIELD_LENGTH * 8)) - 1
 
 
 def build_header(length: int, salt: bytes, nonce: bytes) -> bytes:
-    """Build the fixed 34-byte V1 header.
+    """Susun header: penanda SG, panjang body, salt, lalu nonce.
 
-    ``length`` is the body size only: ciphertext plus the 16-byte AES-GCM
-    authentication tag.
+    Panjang body ditulis dalam 4 byte big-endian dan mencakup ciphertext
+    beserta tag GCM, sehingga ekstraksi berhenti tepat.
     """
     _validate_body_length(length)
     _require_exact_bytes("salt", salt, SALT_LENGTH)
@@ -27,7 +28,7 @@ def build_header(length: int, salt: bytes, nonce: bytes) -> bytes:
 
 
 def parse_header(header_bytes: bytes) -> tuple[int, bytes, bytes]:
-    """Validate and parse a fixed 34-byte V1 header."""
+    """Validasi penanda dan ukuran header, lalu baca panjang body, salt, dan nonce."""
     _require_bytes("header_bytes", header_bytes)
     if len(header_bytes) != HEADER_SIZE:
         raise ValueError(f"header_bytes must be exactly {HEADER_SIZE} bytes")
@@ -44,7 +45,7 @@ def parse_header(header_bytes: bytes) -> tuple[int, bytes, bytes]:
 
 
 def build_payload(ciphertext: bytes, auth_tag: bytes, salt: bytes, nonce: bytes) -> bytes:
-    """Build a complete V1 payload from ciphertext and an AES-GCM tag."""
+    """Gabungkan header, ciphertext, dan tag sesuai urutan protokol StegoChat."""
     _require_bytes("ciphertext", ciphertext)
     _require_exact_bytes("auth_tag", auth_tag, AUTH_TAG_LENGTH)
 
@@ -53,7 +54,11 @@ def build_payload(ciphertext: bytes, auth_tag: bytes, salt: bytes, nonce: bytes)
 
 
 def parse_payload(payload: bytes) -> tuple[bytes, bytes, bytes, bytes]:
-    """Parse a complete V1 payload into ciphertext, tag, salt, and nonce."""
+    """Pisahkan payload menjadi ciphertext, tag, salt, dan nonce untuk dekripsi.
+
+    Panjang body harus cocok dengan header agar data terpotong atau berlebih
+    ditolak sebelum diproses AES-GCM.
+    """
     _require_bytes("payload", payload)
     if len(payload) < HEADER_SIZE:
         raise ValueError("payload is shorter than the V1 header")
@@ -68,13 +73,14 @@ def parse_payload(payload: bytes) -> tuple[bytes, bytes, bytes, bytes]:
 
 
 def split_body(body: bytes) -> tuple[bytes, bytes]:
-    """Split a V1 body into ciphertext and its final 16-byte tag."""
+    """Pisahkan 16 byte terakhir sebagai tag GCM; sisanya adalah ciphertext."""
     _require_bytes("body", body)
     _validate_body_length(len(body))
     return body[:-AUTH_TAG_LENGTH], body[-AUTH_TAG_LENGTH:]
 
 
 def _validate_body_length(length: int) -> None:
+    """Tolak body yang tidak memuat tag atau melampaui batas field panjang 4 byte."""
     if isinstance(length, bool) or not isinstance(length, int):
         raise TypeError("length must be an integer")
     if length < MIN_BODY_LENGTH:
@@ -86,11 +92,13 @@ def _validate_body_length(length: int) -> None:
 
 
 def _require_exact_bytes(name: str, value: bytes, expected_length: int) -> None:
+    """Pastikan field berupa bytes dengan panjang tepat sesuai protokol."""
     _require_bytes(name, value)
     if len(value) != expected_length:
         raise ValueError(f"{name} must be exactly {expected_length} bytes")
 
 
 def _require_bytes(name: str, value: bytes) -> None:
+    """Tolak tipe selain bytes sebelum payload dirangkai atau diurai."""
     if not isinstance(value, bytes):
         raise TypeError(f"{name} must be bytes")

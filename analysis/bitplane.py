@@ -1,9 +1,6 @@
-"""LSB bit-plane extraction and cover/stego comparison for StegoChat V1.
+"""Visualisasi bit terakhir kanal RGB dan lokasi perubahan LSB setelah penyisipan.
 
-The least significant bit plane of an 8-bit channel is a binary image whose
-pixels are the channel's LSB. StegoChat writes payload bits into randomly
-selected channel LSBs, so comparing cover and stego planes shows exactly which
-channel LSBs were overwritten.
+Bit 0 ditampilkan hitam dan bit 1 putih agar perubahan kecil dapat diamati.
 """
 
 from __future__ import annotations
@@ -27,14 +24,14 @@ CHANNEL_NAMES: tuple[str, str, str] = ("R", "G", "B")
 
 @dataclass(frozen=True)
 class LsbBitPlane:
-    """One black/white LSB bit plane per RGB channel."""
+    """Wadah bidang LSB hitam-putih untuk kanal merah, hijau, dan biru."""
 
     red: np.ndarray
     green: np.ndarray
     blue: np.ndarray
 
     def for_channel(self, name: str) -> np.ndarray:
-        """Return the 2-D bit plane for channel ``"R"``, ``"G"``, or ``"B"``."""
+        """Ambil bidang LSB dua dimensi untuk kanal R, G, atau B."""
         if name == "R":
             return self.red
         if name == "G":
@@ -44,13 +41,13 @@ class LsbBitPlane:
         raise ValueError(f"unknown RGB channel name: {name!r}")
 
     def stacked(self) -> np.ndarray:
-        """Return an ``(height, width, 3)`` array of the three planes."""
+        """Gabungkan tiga bidang LSB menjadi array tinggi x lebar x 3 untuk gambar RGB."""
         return np.stack([self.red, self.green, self.blue], axis=-1).astype(np.uint8)
 
 
 @dataclass(frozen=True)
 class LsbBitPlaneComparison:
-    """Cover/stego bit planes plus the map of changed channel LSBs."""
+    """Wadah bidang cover dan stego beserta peta piksel serta jumlah kanal yang berubah."""
 
     cover: LsbBitPlane
     stego: LsbBitPlane
@@ -58,12 +55,12 @@ class LsbBitPlaneComparison:
     changed_channel_count: int
 
     def changed_pixel_count(self) -> int:
-        """Return how many pixels had at least one channel LSB overwritten."""
+        """Hitung piksel yang setidaknya satu kanal LSB-nya berbeda antara cover dan stego."""
         return int(np.count_nonzero(self.channel_change_mask))
 
 
 def extract_lsb_bit_plane(image_rgb: Image.Image) -> LsbBitPlane:
-    """Return the actual per-channel LSB bit plane of an RGB image."""
+    """Ambil bit terakhir tiap kanal gambar RGB dan ubah menjadi bidang hitam-putih."""
     require_rgb_image(image_rgb, "image_rgb")
     array = to_rgb_array(image_rgb)
     return LsbBitPlane(
@@ -76,7 +73,11 @@ def extract_lsb_bit_plane(image_rgb: Image.Image) -> LsbBitPlane:
 def compare_lsb_bit_planes(
     cover_rgb: Image.Image, stego_rgb: Image.Image
 ) -> LsbBitPlaneComparison:
-    """Compare cover and stego LSB bit planes channel by channel."""
+    """Bandingkan LSB cover dan stego per kanal lalu tandai piksel berbeda dengan putih.
+
+    Jumlah kanal berubah dihitung terpisah karena satu piksel dapat memiliki
+    lebih dari satu kanal yang berubah.
+    """
     require_matching_rgb_images(cover_rgb, stego_rgb, "cover_rgb", "stego_rgb")
 
     cover_planes = extract_lsb_bit_plane(cover_rgb)
@@ -87,6 +88,7 @@ def compare_lsb_bit_planes(
     for name in CHANNEL_NAMES:
         differing = cover_planes.for_channel(name) != stego_planes.for_channel(name)
         changed_channels += int(np.count_nonzero(differing))
+        # Peta gabungan menandai satu piksel sekali walau beberapa kanalnya berubah.
         change_mask[differing] = PLANE_ON
 
     return LsbBitPlaneComparison(
@@ -98,22 +100,24 @@ def compare_lsb_bit_planes(
 
 
 def plane_to_image(plane: np.ndarray) -> Image.Image:
-    """Convert a bit plane or change mask into a displayable grayscale image."""
+    """Validasi array bidang LSB lalu ubah menjadi gambar grayscale untuk ditampilkan."""
     _validate_plane_array(plane)
     return Image.fromarray(plane, mode="L")
 
 
 def planes_to_rgb_image(planes: LsbBitPlane) -> Image.Image:
-    """Combine three channel bit planes into a displayable RGB image."""
+    """Gabungkan bidang LSB merah, hijau, dan biru menjadi satu gambar RGB."""
     return Image.fromarray(planes.stacked(), mode="RGB")
 
 
 def _lsb_plane(array: np.ndarray, channel: int) -> np.ndarray:
+    """Ambil bit terakhir dengan mask 1, lalu petakan 0 ke hitam dan 1 ke putih."""
     bits = array[:, :, channel] & LSB_MASK
     return np.where(bits == 1, PLANE_ON, PLANE_OFF).astype(np.uint8)
 
 
 def _validate_plane_array(plane: np.ndarray) -> None:
+    """Pastikan bidang LSB berupa array dua dimensi dengan tipe uint8."""
     if not isinstance(plane, np.ndarray):
         raise TypeError("plane must be a numpy array")
     if plane.ndim != 2:

@@ -1,4 +1,4 @@
-"""Tests for the StegoChat V1 binary payload format."""
+"""Pengujian susunan field dan validasi format biner payload StegoChat."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ from stego.payload import (
 
 
 def test_build_header_uses_v1_field_order_and_size() -> None:
+    """Pastikan header memakai urutan field dan ukuran 34 byte sesuai protokol."""
     salt = secrets.token_bytes(SALT_LENGTH)
     nonce = secrets.token_bytes(NONCE_LENGTH)
     body_length = AUTH_TAG_LENGTH + 5
@@ -35,6 +36,7 @@ def test_build_header_uses_v1_field_order_and_size() -> None:
 
 
 def test_parse_header_round_trips_v1_fields() -> None:
+    """Pastikan panjang body, salt, dan nonce terbaca kembali setelah header dibentuk."""
     salt = secrets.token_bytes(SALT_LENGTH)
     nonce = secrets.token_bytes(NONCE_LENGTH)
     body_length = AUTH_TAG_LENGTH + 9
@@ -47,6 +49,7 @@ def test_parse_header_round_trips_v1_fields() -> None:
 
 
 def test_build_and_parse_payload_round_trip() -> None:
+    """Pastikan semua field payload tetap identik setelah penyusunan dan penguraian."""
     ciphertext = secrets.token_bytes(21)
     auth_tag = secrets.token_bytes(AUTH_TAG_LENGTH)
     salt = secrets.token_bytes(SALT_LENGTH)
@@ -58,6 +61,7 @@ def test_build_and_parse_payload_round_trip() -> None:
 
 
 def test_header_rejects_invalid_magic() -> None:
+    """Pastikan header tanpa penanda SG yang benar ditolak."""
     header = build_header(
         AUTH_TAG_LENGTH,
         secrets.token_bytes(SALT_LENGTH),
@@ -70,6 +74,7 @@ def test_header_rejects_invalid_magic() -> None:
 
 
 def test_header_rejects_length_smaller_than_authentication_tag() -> None:
+    """Pastikan header tidak menyatakan body yang lebih pendek daripada tag."""
     header = (
         MAGIC
         + (AUTH_TAG_LENGTH - 1).to_bytes(4, byteorder="big")
@@ -82,6 +87,7 @@ def test_header_rejects_length_smaller_than_authentication_tag() -> None:
 
 
 def test_build_header_rejects_invalid_salt_or_nonce_lengths() -> None:
+    """Pastikan pembentukan header menolak panjang salt atau nonce yang salah."""
     with pytest.raises(ValueError, match="salt"):
         build_header(
             AUTH_TAG_LENGTH,
@@ -98,11 +104,13 @@ def test_build_header_rejects_invalid_salt_or_nonce_lengths() -> None:
 
 
 def test_parse_payload_rejects_truncated_header() -> None:
+    """Pastikan payload dengan header terpotong ditolak."""
     with pytest.raises(ValueError, match="shorter than the V1 header"):
         parse_payload(secrets.token_bytes(HEADER_SIZE - 1))
 
 
 def test_payload_rejects_mismatched_declared_body_length() -> None:
+    """Pastikan ukuran body nyata harus cocok dengan panjang pada header."""
     header = build_header(
         AUTH_TAG_LENGTH + 1,
         secrets.token_bytes(SALT_LENGTH),
@@ -114,5 +122,6 @@ def test_payload_rejects_mismatched_declared_body_length() -> None:
 
 
 def test_split_body_rejects_a_body_smaller_than_tag() -> None:
+    """Pastikan pemisahan body menolak data yang tidak cukup untuk tag GCM."""
     with pytest.raises(ValueError, match="authentication tag"):
         split_body(secrets.token_bytes(AUTH_TAG_LENGTH - 1))

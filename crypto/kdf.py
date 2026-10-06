@@ -1,4 +1,4 @@
-"""PBKDF2-HMAC-SHA256 key derivation for StegoChat V1."""
+"""Pembentukan kunci AES dari stego-key menggunakan PBKDF2-HMAC-SHA256."""
 
 from __future__ import annotations
 
@@ -14,15 +14,15 @@ PBKDF2_ITERATIONS = 100_000
 
 
 def generate_salt() -> bytes:
-    """Return a fresh cryptographically secure V1 salt."""
+    """Buat salt acak 16 byte agar password yang sama dapat menghasilkan kunci baru."""
     return secrets.token_bytes(SALT_LENGTH)
 
 
 def derive_aes_key(stego_key_bytes: bytes, salt: bytes) -> bytes:
-    """Derive a 32-byte AES-256 key from V1 secret bytes and salt.
+    """Turunkan kunci AES 32 byte dari password dalam bytes dan salt 16 byte.
 
-    The caller owns the stable conversion of the user-provided stego key to
-    bytes. The salt must be exactly 16 bytes as required by System Design V1.
+    PBKDF2-HMAC-SHA256 memakai 100.000 iterasi untuk memperlambat percobaan
+    password. Password dan salt yang sama menghasilkan kunci yang sama.
     """
     _require_bytes("stego_key_bytes", stego_key_bytes)
     _require_bytes("salt", salt)
@@ -30,6 +30,7 @@ def derive_aes_key(stego_key_bytes: bytes, salt: bytes) -> bytes:
     if len(salt) != SALT_LENGTH:
         raise ValueError(f"salt must be exactly {SALT_LENGTH} bytes")
 
+    # Salt disimpan di header; password tetap diperlukan untuk membentuk ulang kunci.
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=AES_KEY_LENGTH,
@@ -40,5 +41,6 @@ def derive_aes_key(stego_key_bytes: bytes, salt: bytes) -> bytes:
 
 
 def _require_bytes(name: str, value: bytes) -> None:
+    """Pastikan password dan salt berupa bytes sebelum diproses PBKDF2."""
     if not isinstance(value, bytes):
         raise TypeError(f"{name} must be bytes")

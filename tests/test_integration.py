@@ -1,4 +1,4 @@
-"""End-to-end tests for the StegoChat V1 integration layer."""
+"""Pengujian alur lengkap enkripsi, penyisipan, ekstraksi, dan dekripsi."""
 
 from __future__ import annotations
 
@@ -18,10 +18,12 @@ HEIGHT = 32
 
 
 def _cover_image() -> Image.Image:
+    """Buat cover RGB sederhana untuk pengujian gabungan modul inti."""
     return Image.new("RGB", (WIDTH, HEIGHT), color=(100, 101, 102))
 
 
 def test_plaintext_embed_extract_round_trip() -> None:
+    """Pastikan pesan kembali utuh melalui seluruh alur AES-GCM dan LSB."""
     plaintext = "StegoChat integration message"
     stego_key = secrets.token_bytes(32)
 
@@ -31,6 +33,7 @@ def test_plaintext_embed_extract_round_trip() -> None:
 
 
 def test_empty_plaintext_round_trip() -> None:
+    """Pastikan pesan kosong tetap dapat dipulihkan dengan header dan tag valid."""
     stego_key = secrets.token_bytes(32)
 
     stego = embed_plaintext(_cover_image(), "", stego_key)
@@ -39,6 +42,7 @@ def test_empty_plaintext_round_trip() -> None:
 
 
 def test_unicode_plaintext_round_trip() -> None:
+    """Pastikan karakter Unicode tetap utuh melalui pengkodean UTF-8."""
     plaintext = "Pesan rahasia: halo dunia, kafe, dan こんにちは"
     stego_key = secrets.token_bytes(32)
 
@@ -48,6 +52,7 @@ def test_unicode_plaintext_round_trip() -> None:
 
 
 def test_wrong_stego_key_fails_extraction_or_authentication() -> None:
+    """Pastikan kunci salah gagal saat ekstraksi payload atau autentikasi GCM."""
     stego = embed_plaintext(
         _cover_image(), "Protected message", secrets.token_bytes(32)
     )
@@ -57,6 +62,7 @@ def test_wrong_stego_key_fails_extraction_or_authentication() -> None:
 
 
 def test_modified_stego_body_fails_aes_gcm_authentication() -> None:
+    """Ubah bit body dalam stego dan pastikan autentikasi menolak pesan rusak."""
     plaintext = "Authenticated message"
     stego_key = secrets.token_bytes(32)
     stego = embed_plaintext(_cover_image(), plaintext, stego_key)
@@ -81,11 +87,13 @@ def test_modified_stego_body_fails_aes_gcm_authentication() -> None:
 
 
 def test_insufficient_image_capacity_is_rejected() -> None:
+    """Pastikan alur lengkap menolak gambar dengan kapasitas tidak cukup."""
     with pytest.raises(ValueError, match="insufficient RGB capacity"):
         embed_plaintext(Image.new("RGB", (9, 10)), "small", secrets.token_bytes(32))
 
 
 def test_png_round_trip_preserves_plaintext() -> None:
+    """Pastikan pesan tetap pulih setelah stego disimpan dan dibuka sebagai PNG."""
     plaintext = "PNG transport preserves this text"
     stego_key = secrets.token_bytes(32)
     stego = embed_plaintext(_cover_image(), plaintext, stego_key)
@@ -99,6 +107,7 @@ def test_png_round_trip_preserves_plaintext() -> None:
 
 
 def test_cover_image_is_not_modified() -> None:
+    """Pastikan alur utama tidak menimpa piksel gambar cover."""
     cover = _cover_image()
     original_bytes = cover.tobytes()
 

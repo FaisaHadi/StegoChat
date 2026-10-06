@@ -1,4 +1,4 @@
-"""Tests for StegoChat V1 RGB one-bit LSB operations."""
+"""Pengujian penyisipan dan pembacaan LSB pada kanal RGB."""
 
 from __future__ import annotations
 
@@ -24,10 +24,12 @@ HEIGHT = 24
 
 
 def _cover_image() -> Image.Image:
+    """Buat cover RGB berwarna tetap agar perubahan LSB mudah dibandingkan."""
     return Image.new("RGB", (WIDTH, HEIGHT), color=(100, 101, 102))
 
 
 def _payload_parts() -> tuple[bytes, bytes, bytes]:
+    """Buat payload uji acak dan pisahkan header serta body untuk pengujian LSB."""
     payload = build_payload(
         secrets.token_bytes(19),
         secrets.token_bytes(AUTH_TAG_LENGTH),
@@ -38,6 +40,7 @@ def _payload_parts() -> tuple[bytes, bytes, bytes]:
 
 
 def test_embed_then_extract_header_and_payload() -> None:
+    """Pastikan header dan payload dapat dibaca kembali sesudah embedding."""
     cover = _cover_image()
     header, body, payload = _payload_parts()
     stego_key = secrets.token_bytes(32)
@@ -50,6 +53,7 @@ def test_embed_then_extract_header_and_payload() -> None:
 
 
 def test_extracted_payload_is_identical_to_embedded_payload() -> None:
+    """Pastikan bytes hasil ekstraksi identik dengan payload yang disisipkan."""
     header, body, payload = _payload_parts()
     stego_key = secrets.token_bytes(32)
 
@@ -59,6 +63,7 @@ def test_extracted_payload_is_identical_to_embedded_payload() -> None:
 
 
 def test_header_and_body_positions_do_not_overlap() -> None:
+    """Pastikan posisi penyimpanan header dan body tidak bertabrakan."""
     header, body, _ = _payload_parts()
     stego_key = secrets.token_bytes(32)
     _, salt, _ = parse_header(header)
@@ -72,6 +77,7 @@ def test_header_and_body_positions_do_not_overlap() -> None:
 
 
 def test_embed_rejects_insufficient_capacity() -> None:
+    """Pastikan embedding menolak payload yang melampaui kapasitas."""
     header, body, _ = _payload_parts()
 
     with pytest.raises(ValueError, match="insufficient RGB capacity"):
@@ -79,6 +85,7 @@ def test_embed_rejects_insufficient_capacity() -> None:
 
 
 def test_non_rgb_image_is_rejected_with_clear_error() -> None:
+    """Pastikan gambar bukan RGB ditolak sebelum operasi kanal."""
     header, body, _ = _payload_parts()
 
     with pytest.raises(ValueError, match="RGB"):
@@ -86,6 +93,7 @@ def test_non_rgb_image_is_rejected_with_clear_error() -> None:
 
 
 def test_embedding_does_not_modify_the_original_image() -> None:
+    """Pastikan embedding menghasilkan salinan tanpa mengubah cover asli."""
     cover = _cover_image()
     original_bytes = cover.tobytes()
     header, body, _ = _payload_parts()
@@ -97,6 +105,7 @@ def test_embedding_does_not_modify_the_original_image() -> None:
 
 
 def test_pixel_changes_are_limited_to_the_least_significant_bit() -> None:
+    """Pastikan hanya bit terakhir yang berubah dan selisih nilai kanal maksimal satu."""
     cover = _cover_image()
     header, body, _ = _payload_parts()
 
@@ -107,6 +116,7 @@ def test_pixel_changes_are_limited_to_the_least_significant_bit() -> None:
 
 
 def test_extraction_is_deterministic_for_the_same_key() -> None:
+    """Pastikan kunci yang sama membaca payload yang sama pada ekstraksi berulang."""
     header, body, payload = _payload_parts()
     stego_key = secrets.token_bytes(32)
     stego = embed_payload(_cover_image(), header, body, stego_key)
@@ -115,6 +125,7 @@ def test_extraction_is_deterministic_for_the_same_key() -> None:
 
 
 def test_wrong_stego_key_does_not_return_the_embedded_payload() -> None:
+    """Pastikan kunci berbeda tidak mengembalikan payload asli."""
     header, body, payload = _payload_parts()
     stego = embed_payload(_cover_image(), header, body, secrets.token_bytes(32))
 
@@ -127,6 +138,7 @@ def test_wrong_stego_key_does_not_return_the_embedded_payload() -> None:
 
 
 def test_png_round_trip_preserves_embedded_payload() -> None:
+    """Pastikan simpan-baca PNG mempertahankan seluruh bit payload."""
     header, body, payload = _payload_parts()
     stego_key = secrets.token_bytes(32)
     stego = embed_payload(_cover_image(), header, body, stego_key)

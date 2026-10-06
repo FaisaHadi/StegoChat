@@ -1,4 +1,4 @@
-"""JPEG sweeps must use one stego source and report actual encoded byte sizes."""
+"""Pengujian sumber stego tunggal, ukuran bytes JPEG, dan penanganan error kompresi."""
 
 import io
 from unittest.mock import Mock
@@ -11,6 +11,7 @@ from stegochat.core import embed_plaintext
 
 
 def test_sweep_embeds_once_and_encodes_each_quality_from_same_pixels(monkeypatch):
+    """Pastikan sweep mengompres piksel stego yang sama dan melaporkan ukuran JPEG nyata."""
     cover = Image.new("RGB", (64, 64), (100, 101, 102))
     embed = Mock(wraps=embed_plaintext)
     monkeypatch.setattr(jpeg, "embed_plaintext", embed)
@@ -18,6 +19,7 @@ def test_sweep_embeds_once_and_encodes_each_quality_from_same_pixels(monkeypatch
     encodings = []
 
     def record(image, image_format, quality):
+        """Catat piksel asal, kualitas, dan bytes keluaran setiap enkode JPEG untuk dibandingkan."""
         encoded = serialize(image, image_format, quality)
         if image_format == "JPEG":
             encodings.append((image.tobytes(), quality, encoded))
@@ -36,6 +38,7 @@ def test_sweep_embeds_once_and_encodes_each_quality_from_same_pixels(monkeypatch
 
 
 def test_attack_accepts_existing_stego_without_modifying_or_reembedding(monkeypatch):
+    """Pastikan serangan menerima stego yang sudah ada tanpa mengubah atau menyisipkan ulang."""
     stego = embed_plaintext(Image.new("RGB", (64, 64), (100, 101, 102)),
                             "hello", b"test-key")
     original = stego.tobytes()
@@ -49,6 +52,7 @@ def test_attack_accepts_existing_stego_without_modifying_or_reembedding(monkeypa
 
 
 def test_recompression_failure_is_recorded(monkeypatch):
+    """Pastikan kegagalan kompresi dicatat sebagai JPEG tidak terbentuk."""
     monkeypatch.setattr(jpeg, "serialize_image", Mock(side_effect=OSError("codec failed")))
     result = jpeg.run_jpeg_attack(Image.new("RGB", (64, 64)), "hello", b"key")
     assert not result.jpeg_created
@@ -57,6 +61,7 @@ def test_recompression_failure_is_recorded(monkeypatch):
 
 
 def test_unexpected_extraction_error_is_not_treated_as_a_successful_attack(monkeypatch):
+    """Pastikan error internal ekstraksi diteruskan dan tidak dianggap payload rusak."""
     monkeypatch.setattr(jpeg, "extract_plaintext", Mock(side_effect=RuntimeError("bug")))
     with pytest.raises(RuntimeError, match="bug"):
         jpeg.run_jpeg_attack(Image.new("RGB", (64, 64)), "hello", b"key")
@@ -64,6 +69,7 @@ def test_unexpected_extraction_error_is_not_treated_as_a_successful_attack(monke
 
 @pytest.mark.parametrize("qualities", [(), (85, 100)])
 def test_empty_or_invalid_sweep_does_not_embed(monkeypatch, qualities):
+    """Pastikan kualitas kosong atau tidak valid tidak memulai embedding."""
     embed = Mock()
     monkeypatch.setattr(jpeg, "embed_plaintext", embed)
     cover = Image.new("RGB", (64, 64))

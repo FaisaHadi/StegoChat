@@ -1,4 +1,4 @@
-"""RGB-channel capacity calculations for StegoChat V1."""
+"""Perhitungan kapasitas LSB dengan memperhitungkan header dan tag autentikasi."""
 
 from __future__ import annotations
 
@@ -10,42 +10,43 @@ HEADER_BITS = HEADER_SIZE * BITS_PER_BYTE
 
 
 def capacity_bits(width: int, height: int) -> int:
-    """Return the number of one-bit RGB-channel locations in an image."""
+    """Hitung kapasitas total: lebar x tinggi x 3, karena tiap kanal RGB menyimpan 1 bit."""
     _validate_dimension("width", width)
     _validate_dimension("height", height)
     return width * height * RGB_CHANNELS
 
 
 def required_bits(body_length: int) -> int:
-    """Return V1 header and body bits required for a declared body length."""
+    """Hitung kebutuhan bit header dan body; panjang body sudah termasuk tag GCM."""
     _validate_body_length(body_length)
     return HEADER_BITS + (body_length * BITS_PER_BYTE)
 
 
 def can_embed(width: int, height: int, body_length: int) -> bool:
-    """Return whether an RGB image can hold the V1 header and body."""
+    """Bandingkan kebutuhan seluruh payload dengan kapasitas gambar untuk mencegah kelebihan data."""
     return required_bits(body_length) <= capacity_bits(width, height)
 
 
 def max_body_length(width: int, height: int) -> int:
-    """Return the maximum body-byte count after reserving the V1 header.
+    """Hitung batas byte body setelah kapasitas dikurangi ukuran header.
 
-    A return value of zero means the image has no valid V1 payload capacity.
+    Nilai dibatasi minimal nol jika header sendiri tidak muat.
     """
     remaining_bits = capacity_bits(width, height) - HEADER_BITS
     return max(0, remaining_bits // BITS_PER_BYTE)
 
 
 def max_plaintext_bytes(width: int, height: int) -> int:
-    """Return the UTF-8 byte limit after reserving the header and auth tag.
+    """Hitung batas byte pesan UTF-8 setelah ruang header dan tag GCM dicadangkan.
 
-    A zero limit does not guarantee even an empty payload fits; use can_embed
-    to validate the complete payload before embedding.
+    Batas nol belum menjamin payload kosong muat; can_embed tetap diperlukan
+    untuk memeriksa ukuran lengkap payload.
     """
     return max(0, max_body_length(width, height) - AUTH_TAG_LENGTH)
 
 
 def _validate_dimension(name: str, value: int) -> None:
+    """Tolak dimensi bukan bilangan bulat positif, termasuk nilai boolean."""
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"{name} must be an integer")
     if value <= 0:
@@ -53,6 +54,7 @@ def _validate_dimension(name: str, value: int) -> None:
 
 
 def _validate_body_length(body_length: int) -> None:
+    """Pastikan panjang body berupa bilangan bulat dan cukup untuk tag autentikasi."""
     if isinstance(body_length, bool) or not isinstance(body_length, int):
         raise TypeError("body_length must be an integer")
     if body_length < MIN_BODY_LENGTH:

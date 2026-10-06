@@ -1,4 +1,4 @@
-"""End-to-end StegoChat V1 embed and extract orchestration."""
+"""Menghubungkan enkripsi AES-GCM dengan penyisipan dan ekstraksi LSB."""
 
 from __future__ import annotations
 
@@ -13,10 +13,15 @@ from stego.payload import HEADER_SIZE, build_payload, parse_payload
 def embed_plaintext(
     cover_rgb: Image.Image, plaintext: str, stego_key_bytes: bytes
 ) -> Image.Image:
-    """Encrypt UTF-8 plaintext and embed its V1 payload in an RGB image."""
+    """Enkripsi pesan UTF-8, susun payload, lalu sisipkan ke salinan cover RGB.
+
+    Salt dan nonce acak membuat setiap penyisipan memakai data kriptografi baru.
+    Header menyimpan informasi yang dibutuhkan untuk memulihkan pesan.
+    """
     _validate_plaintext(plaintext)
     _validate_stego_key(stego_key_bytes)
 
+    # Buat parameter baru, lalu enkripsi sebelum bit payload masuk ke gambar.
     salt = generate_salt()
     aes_key = derive_aes_key(stego_key_bytes, salt)
     nonce = generate_nonce()
@@ -32,9 +37,13 @@ def embed_plaintext(
 
 
 def extract_plaintext(stego_rgb: Image.Image, stego_key_bytes: bytes) -> str:
-    """Extract, authenticate, decrypt, and UTF-8 decode a V1 payload."""
+    """Baca payload LSB, bentuk kembali kunci AES, lalu pulihkan teks UTF-8.
+
+    Pesan hanya dikembalikan jika pemeriksaan tag autentikasi GCM berhasil.
+    """
     _validate_stego_key(stego_key_bytes)
 
+    # Header menyediakan salt dan nonce, bukan password atau kunci AES.
     payload = extract_payload(stego_rgb, stego_key_bytes)
     ciphertext, auth_tag, salt, nonce = parse_payload(payload)
     aes_key = derive_aes_key(stego_key_bytes, salt)
@@ -43,11 +52,13 @@ def extract_plaintext(stego_rgb: Image.Image, stego_key_bytes: bytes) -> str:
 
 
 def _validate_plaintext(plaintext: str) -> None:
+    """Pastikan pesan berupa teks agar dapat dikodekan sebagai UTF-8."""
     if not isinstance(plaintext, str):
         raise TypeError("plaintext must be a string")
 
 
 def _validate_stego_key(stego_key_bytes: bytes) -> None:
+    """Tolak kunci kosong atau bukan bytes sebelum proses kriptografi berjalan."""
     if not isinstance(stego_key_bytes, bytes):
         raise TypeError("stego_key_bytes must be bytes")
     if not stego_key_bytes:

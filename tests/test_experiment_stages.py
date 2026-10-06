@@ -1,4 +1,4 @@
-"""Regression tests for stage status, shared stego input, and metric precision."""
+"""Pengujian regresi status per tahap, pemakaian stego yang sama, dan presisi metrik."""
 
 from unittest.mock import Mock
 
@@ -14,6 +14,7 @@ from analysis.metrics import calculate_mse, psnr_from_mse
 
 @pytest.fixture
 def experiment(monkeypatch):
+    """Siapkan cover, stego, dan mock tahap untuk menyimulasikan berbagai hasil eksperimen."""
     cover = Image.new("RGB", (128, 128), (100, 101, 102))
     stego = cover.copy()
     stego.putpixel((0, 0), (101, 101, 102))
@@ -33,6 +34,7 @@ def experiment(monkeypatch):
 
 
 def test_same_stego_is_used_for_extraction_metrics_and_jpeg(experiment):
+    """Pastikan ekstraksi, metrik, dan JPEG memakai stego yang dibuat sekali."""
     cover, stego, embed, extract, jpeg = experiment
     result = laboratory.run_experiment_case(cover, "hello", b"test-key")
     embed.assert_called_once_with(cover, "hello", b"test-key")
@@ -45,6 +47,7 @@ def test_same_stego_is_used_for_extraction_metrics_and_jpeg(experiment):
 
 
 def test_embed_failure_skips_dependent_stages(experiment):
+    """Pastikan embedding gagal menghentikan tahap yang memerlukan stego."""
     cover, _, embed, extract, jpeg = experiment
     embed.side_effect = RuntimeError("embed failed")
     result = laboratory.run_experiment_case(cover, "hello", b"test-key")
@@ -57,6 +60,7 @@ def test_embed_failure_skips_dependent_stages(experiment):
 
 @pytest.mark.parametrize("failure", [InvalidTag(), ValueError("invalid header")])
 def test_extraction_failure_keeps_embedding_and_independent_results(experiment, failure):
+    """Pastikan ekstraksi gagal tidak menghapus sukses embedding atau hasil tahap mandiri."""
     cover, _, _, extract, jpeg = experiment
     extract.side_effect = failure
     result = laboratory.run_experiment_case(cover, "hello", b"test-key")
@@ -68,6 +72,7 @@ def test_extraction_failure_keeps_embedding_and_independent_results(experiment, 
 
 
 def test_plaintext_mismatch_is_recorded(experiment):
+    """Pastikan pesan berbeda dari asalnya dicatat sebagai ketidakcocokan."""
     cover, _, _, extract, _ = experiment
     extract.return_value = "different message"
     result = laboratory.run_experiment_case(cover, "hello", b"test-key")
@@ -77,6 +82,7 @@ def test_plaintext_mismatch_is_recorded(experiment):
 
 @pytest.mark.parametrize("stage", ["calculate_mse", "psnr_from_mse"])
 def test_metric_failure_preserves_recovery_and_runs_jpeg(experiment, monkeypatch, stage):
+    """Pastikan metrik gagal tidak menghapus hasil pemulihan atau melewati pengujian JPEG."""
     cover, _, _, _, jpeg = experiment
     monkeypatch.setattr(laboratory, stage, Mock(side_effect=RuntimeError("metric failed")))
     result = laboratory.run_experiment_case(cover, "hello", b"test-key")
@@ -88,6 +94,7 @@ def test_metric_failure_preserves_recovery_and_runs_jpeg(experiment, monkeypatch
 
 
 def test_jpeg_exception_preserves_recovery_and_metrics(experiment):
+    """Pastikan error JPEG tidak mengubah keberhasilan ekstraksi dan nilai metrik."""
     cover, stego, _, _, jpeg = experiment
     jpeg.side_effect = RuntimeError("codec failed")
     result = laboratory.run_experiment_case(cover, "hello", b"test-key")
@@ -99,6 +106,7 @@ def test_jpeg_exception_preserves_recovery_and_metrics(experiment):
 
 
 def test_failed_jpeg_creation_is_not_reported_as_payload_destruction(experiment):
+    """Pastikan JPEG yang gagal dibuat dicatat sebagai error, bukan payload rusak."""
     from dataclasses import replace
 
     cover, _, _, _, jpeg = experiment
@@ -111,6 +119,7 @@ def test_failed_jpeg_creation_is_not_reported_as_payload_destruction(experiment)
 
 
 def test_multiple_stage_errors_are_preserved(experiment, monkeypatch):
+    """Pastikan catatan memuat semua tahap yang gagal, bukan hanya error terakhir."""
     cover, _, _, extract, jpeg = experiment
     extract.side_effect = InvalidTag()
     monkeypatch.setattr(laboratory, "calculate_mse", Mock(side_effect=RuntimeError("metric")))
@@ -121,6 +130,7 @@ def test_multiple_stage_errors_are_preserved(experiment, monkeypatch):
 
 
 def test_small_mse_retains_precision_in_result_and_xlsx(experiment, tmp_path):
+    """Pastikan MSE kecil tetap presisi dalam hasil dan berkas Excel."""
     cover, stego, _, _, _ = experiment
     result = laboratory.run_experiment_case(cover, "hello", b"test-key")
     expected = calculate_mse(cover, stego)

@@ -1,4 +1,4 @@
-"""Tests for StegoChat V1 deterministic position selection."""
+"""Pengujian posisi LSB yang unik, valid, dan dapat diulang lintas proses."""
 
 from __future__ import annotations
 
@@ -24,12 +24,14 @@ HEIGHT = 16
 
 
 def test_header_seed_is_deterministic() -> None:
+    """Pastikan kunci yang sama menghasilkan seed header yang sama."""
     stego_key = secrets.token_bytes(32)
 
     assert header_seed(stego_key) == header_seed(stego_key)
 
 
 def test_body_seed_is_deterministic() -> None:
+    """Pastikan kunci dan salt yang sama menghasilkan seed body yang sama."""
     stego_key = secrets.token_bytes(32)
     salt = secrets.token_bytes(SALT_LENGTH)
 
@@ -37,6 +39,7 @@ def test_body_seed_is_deterministic() -> None:
 
 
 def test_header_and_body_seeds_differ() -> None:
+    """Pastikan konteks header dan body menghasilkan seed yang berbeda."""
     stego_key = secrets.token_bytes(32)
     salt = secrets.token_bytes(SALT_LENGTH)
 
@@ -44,10 +47,12 @@ def test_header_and_body_seeds_differ() -> None:
 
 
 def test_changing_stego_key_changes_seed() -> None:
+    """Pastikan pergantian stego-key mengubah seed."""
     assert header_seed(secrets.token_bytes(32)) != header_seed(secrets.token_bytes(32))
 
 
 def test_changing_salt_changes_body_seed() -> None:
+    """Pastikan pergantian salt mengubah seed posisi body."""
     stego_key = secrets.token_bytes(32)
 
     assert body_seed(stego_key, secrets.token_bytes(SALT_LENGTH)) != body_seed(
@@ -56,6 +61,7 @@ def test_changing_salt_changes_body_seed() -> None:
 
 
 def test_same_inputs_produce_identical_header_positions() -> None:
+    """Pastikan masukan identik memberi urutan posisi header identik."""
     stego_key = secrets.token_bytes(32)
 
     assert select_header_positions(stego_key, WIDTH, HEIGHT) == select_header_positions(
@@ -64,6 +70,7 @@ def test_same_inputs_produce_identical_header_positions() -> None:
 
 
 def test_different_seeds_produce_different_position_ordering() -> None:
+    """Pastikan seed berbeda mengubah urutan posisi terpilih."""
     salt = secrets.token_bytes(SALT_LENGTH)
     first_key = secrets.token_bytes(32)
     second_key = secrets.token_bytes(32)
@@ -79,6 +86,7 @@ def test_different_seeds_produce_different_position_ordering() -> None:
 
 
 def test_header_positions_are_unique_and_exactly_v1_size() -> None:
+    """Pastikan header memakai tepat 272 posisi tanpa duplikasi."""
     positions = select_header_positions(secrets.token_bytes(32), WIDTH, HEIGHT)
 
     assert len(positions) == HEADER_POSITION_COUNT == 272
@@ -86,6 +94,7 @@ def test_header_positions_are_unique_and_exactly_v1_size() -> None:
 
 
 def test_body_positions_are_unique_and_exclude_reserved_header_positions() -> None:
+    """Pastikan posisi body unik dan tidak menyentuh posisi header."""
     stego_key = secrets.token_bytes(32)
     salt = secrets.token_bytes(SALT_LENGTH)
     header_positions = select_header_positions(stego_key, WIDTH, HEIGHT)
@@ -100,11 +109,13 @@ def test_body_positions_are_unique_and_exclude_reserved_header_positions() -> No
 
 
 def test_header_selection_rejects_an_image_that_is_too_small() -> None:
+    """Pastikan pemilihan header menolak gambar yang kapasitasnya terlalu kecil."""
     with pytest.raises(ValueError, match="insufficient"):
         select_header_positions(secrets.token_bytes(32), 9, 10)
 
 
 def test_body_selection_rejects_insufficient_non_reserved_positions() -> None:
+    """Pastikan permintaan body tidak melebihi posisi yang tersisa setelah header."""
     stego_key = secrets.token_bytes(32)
     salt = secrets.token_bytes(SALT_LENGTH)
     reserved_position = [(0, 0, 0)]
@@ -114,6 +125,7 @@ def test_body_selection_rejects_insufficient_non_reserved_positions() -> None:
 
 
 def test_positions_are_valid_rgb_channel_coordinates() -> None:
+    """Pastikan koordinat terpilih berada dalam gambar dengan kanal 0, 1, atau 2."""
     stego_key = secrets.token_bytes(32)
     salt = secrets.token_bytes(SALT_LENGTH)
     header_positions = select_header_positions(stego_key, WIDTH, HEIGHT)
@@ -128,6 +140,7 @@ def test_positions_are_valid_rgb_channel_coordinates() -> None:
 
 
 def test_header_positions_are_reproducible_across_python_processes() -> None:
+    """Pastikan posisi header konsisten ketika dihitung pada proses Python berbeda."""
     stego_key = secrets.token_bytes(32)
     project_root = Path(__file__).resolve().parents[1]
     process_code = (
