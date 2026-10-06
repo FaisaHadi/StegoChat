@@ -1,7 +1,7 @@
-"""StegoChat Streamlit Application.
+"""Antarmuka Streamlit untuk menyembunyikan, membaca, dan menguji pesan dalam gambar.
 
-A Secret Photo Messenger that encrypts messages with AES-256-GCM and hides
-the authenticated payload in the least significant bits of an RGB image.
+Proses kriptografi dan LSB dijalankan oleh modul inti; antarmuka mengelola
+input, pratinjau, hasil sesi, visualisasi, dan unduhan.
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ from stego.capacity import capacity_bits, max_plaintext_bytes, required_bits
 from stego.payload import AUTH_TAG_LENGTH
 from stegochat.core import embed_plaintext, extract_plaintext
 
+# Konfigurasi halaman dan CSS berlaku bersama pada welcome serta semua tab aplikasi.
 st.set_page_config(
     page_title="StegoChat - Secret Photo Messenger",
     page_icon="🔒",
@@ -885,35 +886,47 @@ st.markdown(
             width: min(160px, 42%);
         }
     }
+
+    /* Bungkus deskripsi pada layar ponsel tanpa mengubah tampilan desktop. */
+    @media (max-width: 640px) {
+        .main-header-center .hero-description {
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }
+    }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 # ============================================================================
-# HELPER FUNCTIONS
+# FUNGSI BANTUAN
 # ============================================================================
 
 
 def image_to_bytes(image: Image.Image, format: str = "PNG") -> bytes:
-    """Convert a PIL Image to bytes for download."""
+    """Simpan gambar Pillow ke buffer memori agar dapat ditampilkan dan diunduh."""
     buffer = io.BytesIO()
     image.save(buffer, format=format)
     return buffer.getvalue()
 
 
 def clear_embed_result() -> None:
-    """Discard output before rerunning with a changed cover, message, or key."""
+    """Hapus hasil embed lama saat cover, pesan, atau kunci berubah agar output tetap sesuai input."""
     st.session_state.pop("embed_result", None)
 
 
 # ============================================================================
-# TAB 1: EMBED & SEND
+# TAB 1: PENYISIPAN PESAN
 # ============================================================================
 
 
 def tab_embed_send() -> None:
-    """Tab 1: Embed a message into an image."""
+    """Tampilkan input cover dan pesan, validasi kapasitas, lalu jalankan embedding.
+
+    Hasil PNG serta MSE dan PSNR disimpan di session_state supaya unduhan
+    atau rerun biasa tidak menghilangkan output.
+    """
     st.header("Embed & Send")
 
     col1, col2 = st.columns([1, 1], gap="large")
@@ -963,6 +976,7 @@ def tab_embed_send() -> None:
 
                 width, height = cover_image.size
                 capacity = capacity_bits(width, height)
+                # Hitung semua byte: teks UTF-8, tag GCM, dan header dari modul kapasitas.
                 payload_bits = required_bits(
                     len(message.encode("utf-8")) + AUTH_TAG_LENGTH
                 )
@@ -986,6 +1000,7 @@ def tab_embed_send() -> None:
                         )
                         mse = calculate_mse(cover_image, stego_image)
                         psnr = calculate_psnr(cover_image, stego_image)
+                        # Simpan PNG dan metrik sekali agar rerun unduhan memakai hasil yang sama.
                         st.session_state["embed_result"] = {
                             "image_bytes": image_to_bytes(stego_image, "PNG"),
                             "mse": mse,
@@ -998,8 +1013,8 @@ def tab_embed_send() -> None:
             clear_embed_result()
             st.warning("Please provide cover image, message, and stego key")
 
-    # A download button reruns Streamlit. Keep the completed result in session
-    # state so the output remains visible after downloading or other reruns.
+    # Streamlit menjalankan ulang skrip saat unduhan atau widget memicu rerun.
+    # Ambil hasil sesi agar stego tidak hilang atau dienkripsi ulang.
     embed_result = st.session_state.get("embed_result")
 
     with col2:
@@ -1063,17 +1078,21 @@ def tab_embed_send() -> None:
 
 
 # ============================================================================
-# TAB 2: EXTRACT & READ
+# TAB 2: EKSTRAKSI DAN PEMBACAAN PESAN
 # ============================================================================
 
 
 def clear_extract_result() -> None:
-    """Invalidate recovered text when the uploaded image or key changes."""
+    """Hapus plaintext atau error lama ketika gambar stego atau kunci diganti."""
     st.session_state.pop("extract_result", None)
 
 
 def tab_extract_read() -> None:
-    """Tab 2: Extract and decrypt a message."""
+    """Tampilkan stego, jalankan ekstraksi dan dekripsi, lalu tampilkan pesan atau error.
+
+    Kegagalan gambar, format payload, dan autentikasi ditangani terpisah.
+    Teks hasil di-escape sebelum dimasukkan ke HTML.
+    """
     st.header("Extract & Read")
 
     col1, col2 = st.columns([1, 1], gap="large")
@@ -1121,6 +1140,7 @@ def tab_extract_read() -> None:
                     plaintext = extract_plaintext(
                         stego_image, stego_key.encode("utf-8")
                     )
+                # Bedakan data gagal autentikasi, gambar tidak terbaca, dan payload tidak valid.
                 except InvalidTag:
                     extraction_error = (
                         "Autentikasi pesan gagal. Kunci tidak cocok atau payload "
@@ -1157,6 +1177,7 @@ def tab_extract_read() -> None:
         st.subheader("Output")
 
         if plaintext is not None:
+            # Escape teks pengguna agar isi pesan tidak dijalankan sebagai markup HTML.
             safe_plaintext = html.escape(plaintext).replace("\n", "<br>")
             st.markdown(
                 '<div class="extract-output-box">'
@@ -1189,12 +1210,12 @@ def tab_extract_read() -> None:
 
 
 # ============================================================================
-# TAB 3: LABORATORY & SECURITY TESTING
+# TAB 3: LABORATORIUM DAN PENGUJIAN KEAMANAN
 # ============================================================================
 
 
 def _render_uploaded_image_preview(uploaded_file: Any, label: str) -> None:
-    """Show an uploaded image as a preview without consuming its file buffer."""
+    """Tampilkan pratinjau RGB dari salinan bytes unggahan agar posisi buffer asli tetap."""
     if uploaded_file is None:
         return
 
@@ -1207,7 +1228,11 @@ def _render_uploaded_image_preview(uploaded_file: Any, label: str) -> None:
 
 
 def _render_jpeg_attack_panel() -> None:
-    """Render an interactive quality sweep for the LSB JPEG fragility test."""
+    """Jalankan sweep kualitas JPEG lalu tampilkan ringkasan, grafik, dan tabel terfilter.
+
+    Hasil batch disimpan selama sesi agar pergantian filter tidak menjalankan
+    kompresi ulang.
+    """
     st.subheader("Uji kerapuhan kompresi JPEG")
     st.caption(
         "Bandingkan beberapa kualitas JPEG dan lihat dampaknya pada pemulihan "
@@ -1256,6 +1281,7 @@ def _render_jpeg_attack_panel() -> None:
                         stego_key.encode("utf-8"),
                         qualities=tuple(sorted(qualities, reverse=True)),
                     )
+                # Bedakan payload rusak dari uji yang gagal membentuk JPEG.
                 st.session_state["jpeg_attack_results"] = [
                     {
                         "quality": result.quality,
@@ -1284,6 +1310,7 @@ def _render_jpeg_attack_panel() -> None:
         st.session_state.pop("jpeg_attack_results", None)
         st.session_state.pop("jpeg_attack_updated_at", None)
 
+    # Filter membaca hasil batch yang tersimpan, sehingga kompresi tidak diulang.
     saved_results = st.session_state.get("jpeg_attack_results", [])
     if not saved_results:
         st.info("Jalankan pengujian untuk melihat grafik dan ringkasan hasil.")
@@ -1367,7 +1394,11 @@ def _render_jpeg_attack_panel() -> None:
 
 
 def _render_laboratory_runner() -> None:
-    """Run repeatable cases and render a filterable laboratory dashboard."""
+    """Uji kombinasi gambar bawaan atau unggahan dengan ukuran pesan yang dipilih.
+
+    Modul laboratory menjalankan logika kasus; panel ini mengelola progres,
+    filter, grafik, detail, serta unduhan CSV dan XLSX dari hasil sesi.
+    """
     st.subheader("Experiment Runner")
     st.caption(
         "Jalankan pengujian pada beberapa gambar dan ukuran pesan. Hasil tersimpan "
@@ -1407,6 +1438,7 @@ def _render_laboratory_runner() -> None:
                 with column:
                     _render_uploaded_image_preview(uploaded, uploaded.name)
 
+    # Form menjalankan eksperimen setelah tombol submit, bukan tiap perubahan pilihan.
     with st.form("lab_experiment_form", border=False):
         selected_images = st.multiselect(
             "Gambar uji bawaan",
@@ -1440,6 +1472,7 @@ def _render_laboratory_runner() -> None:
         return
 
     if run_requested:
+        # Satukan path gambar bawaan dan bytes unggahan dalam daftar kasus yang sama.
         experiment_images: list[tuple[str, str | bytes]] = [
             (image_name, f"{image_dir}/{image_name}")
             for image_name in selected_images
@@ -1479,6 +1512,7 @@ def _render_laboratory_runner() -> None:
                             f"Memproses kasus {current_case} dari {total_cases}: "
                             f"{image_name}, pesan {message_size} byte"
                         )
+                        # Huruf X memakai satu byte UTF-8 agar ukuran uji tepat sesuai pilihan.
                         result = run_experiment_case(
                             cover_image,
                             "X" * message_size,
@@ -1515,6 +1549,7 @@ def _render_laboratory_runner() -> None:
         return
 
     results_df = pd.DataFrame(results)
+    # Status ekstraksi berhasil hanya jika embedding dan pemulihan sama-sama sukses.
     results_df["overall_success"] = (
         results_df["embed_success"].fillna(False)
         & results_df["extract_success"].fillna(False)
@@ -1530,6 +1565,7 @@ def _render_laboratory_runner() -> None:
     image_options = ["Semua gambar", *sorted(results_df["image_name"].unique())]
     size_values = sorted(results_df["message_size_bytes"].unique())
     size_options = ["Semua ukuran", *[f"{size} byte" for size in size_values]]
+    # Sesuaikan pilihan filter lama jika batch baru memiliki gambar atau ukuran berbeda.
     if st.session_state.get("lab_filter_image") not in image_options:
         st.session_state["lab_filter_image"] = image_options[0]
     if st.session_state.get("lab_filter_size") not in size_options:
@@ -1575,6 +1611,7 @@ def _render_laboratory_runner() -> None:
 
     st.subheader("Ringkasan hasil")
     success_count = int(filtered_df["overall_success"].sum())
+    # Ringkasan kualitas hanya menghitung kasus yang benar-benar memiliki nilai PSNR.
     measured_psnr = filtered_df["psnr"].dropna()
     average_psnr = measured_psnr.mean() if not measured_psnr.empty else None
     quality_pass_count = int((measured_psnr >= 30).sum())
@@ -1706,6 +1743,7 @@ def _render_laboratory_runner() -> None:
         "jpeg_attack_result": "Hasil JPEG",
         "error": "Catatan",
     }
+    # Ubah label untuk tampilan; nilai numerik asli tetap dipakai saat analisis dan ekspor.
     visible_df = filtered_df[display_columns].rename(columns=column_labels)
     visible_df["Hasil JPEG"] = visible_df["Hasil JPEG"].map(
         {
@@ -1777,6 +1815,7 @@ def _render_laboratory_runner() -> None:
         )
     with download_cols[1]:
         workbook = io.BytesIO()
+        # Excel memuat seluruh hasil dan filter aktif; CSV hanya memuat hasil terfilter.
         with pd.ExcelWriter(workbook, engine="openpyxl") as writer:
             results_df.drop(columns=["overall_success"]).to_excel(
                 writer, index=False, sheet_name="Hasil eksperimen"
@@ -1795,7 +1834,11 @@ def _render_laboratory_runner() -> None:
 
 
 def tab_laboratory() -> None:
-    """Tab 3: Laboratory experiments and security testing."""
+    """Tampilkan lima tab analisis: histogram, bidang LSB, JPEG, runner, dan Chi-Square.
+
+    Histogram dan bidang LSB membandingkan cover-stego; Chi-Square hanya
+    memerlukan satu citra dan memberi indikasi statistik per kanal.
+    """
     st.header("Laboratory & Security Testing")
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs(
@@ -1838,6 +1881,7 @@ def tab_laboratory() -> None:
                     stego_image,
                 )
 
+                # Grid dua baris menempatkan histogram cover di atas dan stego di bawah.
                 fig, axes = plt.subplots(
                     2,
                     3,
@@ -1884,6 +1928,7 @@ def tab_laboratory() -> None:
                     axes[1, i].tick_params(axis="both", labelsize=8)
 
                 st.pyplot(fig)
+                # Tutup figure setelah tampil agar rerun tidak menumpuk objek Matplotlib.
                 plt.close(fig)
 
                 st.info(
@@ -2049,6 +2094,7 @@ def tab_laboratory() -> None:
                 rows = chi_square_report_to_rows(
                     report
                 )
+                # Format p-value hanya untuk tabel; hasil perhitungan aslinya tetap numerik.
                 display_rows = [
                     {
                         **row,
@@ -2070,6 +2116,7 @@ def tab_laboratory() -> None:
                     report.suspected_channel_count()
                 )
 
+                # Dua kanal mencurigakan memicu indikasi; hasil rendah bukan bukti bebas pesan.
                 if suspected >= 2:
                     st.warning(
                         f"⚠️ {suspected} dari 3 channel menunjukkan "
@@ -2101,12 +2148,12 @@ def tab_laboratory() -> None:
 
 
 # ============================================================================
-# MAIN APP
+# ALUR UTAMA APLIKASI
 # ============================================================================
 
 
 def render_footer() -> None:
-    """Render the shared footer on the welcome and application screens."""
+    """Tampilkan identitas aplikasi dan anggota kelompok secara konsisten di tiap halaman."""
     st.markdown(
         '<footer class="app-footer" role="contentinfo">'
         '<div class="app-footer-brand">'
@@ -2133,7 +2180,7 @@ def render_footer() -> None:
 
 
 def show_welcome() -> None:
-    """Display the StegoChat welcome screen before entering the main app."""
+    """Tampilkan halaman pembuka dan tombol mulai yang mengaktifkan halaman utama melalui rerun."""
     with st.container(key="welcome_screen"):
         st.markdown(
             '<div class="welcome-wrap">'
@@ -2196,6 +2243,7 @@ def show_welcome() -> None:
                 width="stretch",
                 key="start_stegochat",
             ):
+                # Penanda halaman dipertahankan selama sesi; rerun menampilkan tab utama.
                 st.session_state["started"] = True
                 st.rerun()
 
@@ -2225,12 +2273,12 @@ def show_welcome() -> None:
 
 
 def return_to_welcome() -> None:
-    """Return to the welcome screen before Streamlit reruns the app."""
+    """Ubah penanda started sebelum rerun agar aplikasi kembali ke halaman pembuka."""
     st.session_state["started"] = False
 
 
 def main() -> None:
-    """Main application entry point."""
+    """Pilih halaman pembuka atau aplikasi berdasarkan session_state, lalu susun tab dan footer."""
 
     if "started" not in st.session_state:
         st.session_state["started"] = False
@@ -2239,7 +2287,7 @@ def main() -> None:
         show_welcome()
         return
 
-    # Main header: arrow and AES badge share one horizontal line.
+    # Susun tombol kembali dan badge AES pada baris header yang sama.
     header_left, header_center, header_right = st.columns(
         [0.35, 2, 0.35],
         gap="small",
