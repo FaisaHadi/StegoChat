@@ -49,6 +49,9 @@ st.markdown(
     }
 
     /* Keep analysis visuals readable on wide screens and fluid on narrow ones. */
+    div.st-key-tab-embed-responsive,
+    div.st-key-tab-extract-responsive,
+    div.st-key-tab-laboratory-responsive,
     div.st-key-lab-histogram-responsive,
     div.st-key-lab-lsb-responsive {
         width: 100%;
@@ -1077,13 +1080,16 @@ def main() -> None:
     )
 
     with tab1:
-        tab_embed_send()
+        with st.container(key="tab-embed-responsive"):
+            tab_embed_send()
 
     with tab2:
-        tab_extract_read()
+        with st.container(key="tab-extract-responsive"):
+            tab_extract_read()
 
     with tab3:
-        tab_laboratory()
+        with st.container(key="tab-laboratory-responsive"):
+            tab_laboratory()
 
     render_footer()
 
