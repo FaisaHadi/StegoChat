@@ -31,7 +31,7 @@ def new_app():
     return app
 
 
-def test_main_navigation_keeps_native_tabs_and_full_width_content():
+def test_main_navigation_is_left_aligned_and_matches_content_width():
     # Identitas khusus membatasi penataan navigasi utama tanpa menyentuh subtab.
     app = new_app()
     main_tabs, laboratory_tabs = app.get("tab_container")
@@ -44,6 +44,18 @@ def test_main_navigation_keeps_native_tabs_and_full_width_content():
         "Laboratory & Security Testing",
     ]
     assert len(app.tabs) == 8
+    # Cegah aturan pemusatan tab utama muncul lagi; posisi nyata dicek di browser.
+    stylesheet = next(
+        element.value for element in app.markdown if ".st-key-main_navigation" in element.value
+    )
+    width_rule = stylesheet.split("div.st-key-main_navigation,", 1)[1].split("}", 1)[0]
+    assert "div.st-key-tab-laboratory-responsive" in width_rule
+    assert "max-width: 1100px;" in width_rule
+    navigation_rule = stylesheet.split(
+        '.st-key-main_navigation > div > [role="tablist"]', 1
+    )[1].split("}", 1)[0]
+    assert "justify-content: flex-start;" in navigation_rule
+    assert "justify-content: safe center;" not in navigation_rule
 
 
 def button(app, label):

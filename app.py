@@ -49,6 +49,7 @@ st.markdown(
     }
 
     /* Keep analysis visuals readable on wide screens and fluid on narrow ones. */
+    div.st-key-main_navigation,
     div.st-key-tab-embed-responsive,
     div.st-key-tab-extract-responsive,
     div.st-key-tab-laboratory-responsive,
@@ -221,12 +222,11 @@ st.markdown(
         border-bottom: 2px solid #38BDF8 !important;
     }
 
-    /* Pusatkan navigasi utama saja; subtab laboratorium tetap rata kiri.
-       Safe center kembali ke rata kiri saat tab melampaui lebar layar,
-       sehingga pilihan pertama tetap terjangkau pada perangkat kecil. */
+    /* Ratakan navigasi utama ke kiri agar sejajar dengan judul dan subtab.
+       Pilihan pertama tetap terjangkau saat tab melampaui lebar layar. */
     .st-key-main_navigation > div > [role="tablist"],
     .st-key-main_navigation > [data-baseweb="tab-list"] {
-        justify-content: safe center;
+        justify-content: flex-start;
         gap: 0.5rem;
     }
 
