@@ -221,6 +221,22 @@ st.markdown(
         border-bottom: 2px solid #38BDF8 !important;
     }
 
+    /* Pusatkan navigasi utama saja; subtab laboratorium tetap rata kiri.
+       Safe center kembali ke rata kiri saat tab melampaui lebar layar,
+       sehingga pilihan pertama tetap terjangkau pada perangkat kecil. */
+    .st-key-main_navigation > div > [role="tablist"],
+    .st-key-main_navigation > [data-baseweb="tab-list"] {
+        justify-content: safe center;
+        gap: 0.5rem;
+    }
+
+    .st-key-main_navigation > div > [role="tablist"] > [role="tab"],
+    .st-key-main_navigation > [data-baseweb="tab-list"] > [data-baseweb="tab"] {
+        min-height: 3rem;
+        padding: 0.625rem 1rem;
+        flex-shrink: 0;
+    }
+
     /* ============ TOMBOL: pill shape ============ */
 
     .stButton > button {
@@ -1076,7 +1092,8 @@ def main() -> None:
             "Embed & Send",
             "Extract & Read",
             "Laboratory & Security Testing",
-        ]
+        ],
+        key="main_navigation",
     )
 
     with tab1:

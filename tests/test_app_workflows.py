@@ -31,6 +31,21 @@ def new_app():
     return app
 
 
+def test_main_navigation_keeps_native_tabs_and_full_width_content():
+    # Identitas khusus membatasi penataan navigasi utama tanpa menyentuh subtab.
+    app = new_app()
+    main_tabs, laboratory_tabs = app.get("tab_container")
+    assert main_tabs.proto.id.endswith("-main_navigation")
+    assert not laboratory_tabs.proto.id
+    assert main_tabs.proto.width_config.use_stretch
+    assert [tab.label for tab in app.tabs[:3]] == [
+        "Embed & Send",
+        "Extract & Read",
+        "Laboratory & Security Testing",
+    ]
+    assert len(app.tabs) == 8
+
+
 def button(app, label):
     """Cari widget tombol dari label agar pengujian menekan kontrol yang tepat."""
     return next(widget for widget in app.button if widget.label == label)
